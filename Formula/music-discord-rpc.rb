@@ -1,7 +1,7 @@
 class MusicDiscordRpc < Formula
   desc "Cross-platform Discord rich presence for music with album cover and progress bar"
   homepage "https://github.com/patryk-ku/music-discord-rpc"
-  version "0.6.1"
+  version "0.6.2"
   license "MIT"
 
   depends_on "media-control"
