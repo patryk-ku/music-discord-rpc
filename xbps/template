@@ -1,6 +1,6 @@
 # Template file for 'music-discord-rpc'
 pkgname=music-discord-rpc
-version=0.6.1
+version=0.6.2
 revision=1
 build_style=cargo
 short_desc="Cross-platform Discord rich presence for music with album cover and progress bar support."

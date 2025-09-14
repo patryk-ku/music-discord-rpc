@@ -1,7 +1,7 @@
 name: music-discord-rpc
 arch: amd64
 platform: linux
-version: "0.6.1"
+version: "0.6.2"
 release: "1"
 section: default
 maintainer: "Patryk Kurdziel <patryk.kurdziel@protonmail.com>"

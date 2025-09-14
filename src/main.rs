@@ -220,7 +220,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("────────────────────────────────────────────────────");
                         println!("List of available music players with MPRIS support:");
                         for music_player in &player_list {
-                            println!(" * {}", music_player.identity());
+                            if music_player.bus_name() != "org.mpris.MediaPlayer2.playerctld" {
+                                println!(" * {}", music_player.identity());
+                            }
                         }
                         println!("");
                         println!("Use the name to choose from which source the script should take data for the Discord status.");
@@ -277,11 +279,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(target_os = "linux")]
         let player_finder = if allowlist_enabled {
             let mut allowlist_finder = Err(mpris::FindingError::NoPlayerFound);
-            for allowlist_entry in &settings.allowlist {
-                allowlist_finder = player.find_by_name(&allowlist_entry);
 
-                if allowlist_finder.is_ok() {
-                    break;
+            // Find all players and sort them by allow list order then return the first one
+            if let Ok(all_players) = player.find_all() {
+                let mut found_players: Vec<_> = all_players
+                    .into_iter()
+                    .filter(|p| {
+                        !p.bus_name().eq("org.mpris.MediaPlayer2.playerctld")
+                            && settings.allowlist.contains(&p.identity().to_string())
+                    })
+                    .collect();
+
+                if !found_players.is_empty() {
+                    found_players.sort_by_key(|p| {
+                        settings
+                            .allowlist
+                            .iter()
+                            .position(|allowlisted_name| allowlisted_name == p.identity())
+                            .unwrap_or(usize::MAX)
+                    });
+
+                    allowlist_finder = Ok(found_players.remove(0));
                 }
             }
             allowlist_finder

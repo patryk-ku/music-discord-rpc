@@ -1,3 +1,7 @@
+## v0.6.2
+
+- Fix: Prevent playerctld from breaking allow list (#41).
+
 ## v0.6.1
 
 - Fix the allowlist on macOS (#38).
