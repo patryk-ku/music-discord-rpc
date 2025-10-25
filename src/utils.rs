@@ -274,7 +274,7 @@ pub fn get_cover_url(
     }
 
     let request_url = format!(
-    	"http://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key={}&artist={}&album={}&autocorrect=0&format=json",
+    	"https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key={}&artist={}&album={}&autocorrect=0&format=json",
      	lastfm_api_key,
      	url_escape::encode_component(artist),
      	url_escape::encode_component(album)
@@ -408,7 +408,7 @@ pub fn get_cover_url_musicbrainz(
 
 pub fn get_lastfm_avatar(username: &str, lastfm_api_key: &str) -> String {
     let request_url = format!(
-        "http://ws.audioscrobbler.com/2.0/?method=user.getinfo&api_key={}&user={}&format=json",
+        "https://ws.audioscrobbler.com/2.0/?method=user.getinfo&api_key={}&user={}&format=json",
         lastfm_api_key,
         url_escape::encode_component(username)
     );
