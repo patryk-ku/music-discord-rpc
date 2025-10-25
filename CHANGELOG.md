@@ -1,3 +1,7 @@
+## Unreleased
+
+- Use HTTPS for all external API requests (Last.fm, Cover Art Archive).
+
 ## v0.6.2
 
 - Fix: Prevent playerctld from breaking allow list (#41).
