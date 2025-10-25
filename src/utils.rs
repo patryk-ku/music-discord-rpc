@@ -372,7 +372,7 @@ pub fn get_cover_url_musicbrainz(
     }
 
     let mut url: String = match client
-        .get(format!("http://coverartarchive.org/release/{}/", mbid))
+        .get(format!("https://coverartarchive.org/release/{}/", mbid))
         .header(USER_AGENT, &user_agent)
         .send()
     {
