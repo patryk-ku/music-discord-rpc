@@ -192,10 +192,11 @@ disable_mpris_art_url: false
 # Only use the status from the following music players
 # Use -l, --list-players to get player exact name to use with this option
 # The order matters and the first is the most important.
+# You can use wildcard (*) at the end of a pattern to match any player name starting with that prefix.
 # allowlist:
 #   - "VLC Media Player"
 #   - "Chrome"
-#   - "Any other player"
+#   - "org.mpris.MediaPlayer2.kdeconnect.mpris_*"
 
 # Will use the "watching" activity
 # Use -l, --list-players to get player exact name to use with this option
