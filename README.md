@@ -310,6 +310,8 @@ Keep in mind that when using XDG Autostart, there's no built-in way to restart t
 
 To select the music players, use the `-a`,`--allowlist-add` argument or `allowlist` in the config file. This argument can be used multiple times to add more players. The order matters and the first is the most important.
 
+You can filter by player name (identity) or by MPRIS bus name. This is useful when multiple players have the same identity.
+
 arguments:
 
 ```sh
@@ -325,7 +327,36 @@ allowlist:
   - "Any other player"
 ```
 
-Use the `-l`, `--list-players` to get your player name.
+Use the `-l`, `--list-players` to get your player name and bus name.
+
+If you have multiple players with the same name (e.g., browser with both native MPRIS and browser extension), you can use the bus name to distinguish them:
+
+```yaml
+allowlist:
+  - "org.mpris.MediaPlayer2.plasma-browser-integration"
+```
+
+or with arguments:
+
+```sh
+music-discord-rpc -a "org.mpris.MediaPlayer2.plasma-browser-integration"
+```
+
+You can also use wildcards (`*`) at the end of patterns to match players with dynamic bus names (e.g., KDE Connect devices or browser instances):
+
+```yaml
+allowlist:
+  - "org.mpris.MediaPlayer2.kdeconnect.mpris_*"
+  - "org.mpris.MediaPlayer2.brave.instance*"
+```
+
+or with arguments:
+
+```sh
+music-discord-rpc -a "org.mpris.MediaPlayer2.kdeconnect.mpris_*"
+```
+
+Note: Only suffix wildcards are supported (pattern must end with `*`). Wildcards in the middle or at the beginning are not supported.
 
 ### "Watching Video" activity
 

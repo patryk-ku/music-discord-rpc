@@ -22,6 +22,38 @@ const LASTFM_API_KEY: &'static str = match option_env!("LASTFM_API_KEY") {
     None => "",
 };
 
+fn matches_allowlist(player_name: &str, pattern: &str) -> bool {
+    pattern.strip_suffix('*')
+        .map_or_else(|| player_name == pattern, |prefix| player_name.starts_with(prefix))
+}
+
+#[cfg(target_os = "linux")]
+fn is_player_allowlisted(player: &mpris::Player, allowlist: &[String]) -> bool {
+    let identity = player.identity();
+    let bus_name = player.bus_name();
+    allowlist.iter().any(|pattern| {
+        matches_allowlist(identity, pattern) || matches_allowlist(bus_name, pattern)
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn get_playback_priority(player: &mpris::Player) -> u8 {
+    match player.get_playback_status() {
+        Ok(mpris::PlaybackStatus::Playing) => 0,
+        Ok(mpris::PlaybackStatus::Paused) => 1,
+        _ => 2,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn has_valid_metadata(meta: &mpris::Metadata) -> bool {
+    let has_title = meta.title().is_some();
+    let has_artist = meta.artists()
+        .map(|a| a.first().map_or(false, |s| !s.is_empty()))
+        .unwrap_or(false);
+    has_title && has_artist
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Set home path, If $HOME is not set, do not write or read anything from the user's disk
     let (home_exists, home_dir) = match env::var("HOME") {
@@ -193,7 +225,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // On Linux try to connect to MPRIS
         #[cfg(target_os = "linux")]
-        let player = match PlayerFinder::new() {
+        let player_finder = match PlayerFinder::new() {
             Ok(player) => {
                 dbus_notif = false;
                 player
@@ -211,7 +243,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // List available players and exit
         if settings.list_players {
             #[cfg(target_os = "linux")]
-            match player.find_all() {
+            match player_finder.find_all() {
                 Ok(player_list) => {
                     if player_list.is_empty() {
                         println!("Could not find any player with MPRIS support.");
@@ -221,21 +253,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("List of available music players with MPRIS support:");
                         for music_player in &player_list {
                             if music_player.bus_name() != "org.mpris.MediaPlayer2.playerctld" {
-                                println!(" * {}", music_player.identity());
+                                println!(" * {} ({})", music_player.identity(), music_player.bus_name());
                             }
                         }
-                        println!("");
-                        println!("Use the name to choose from which source the script should take data for the Discord status.");
-                        println!("Usage instructions:");
-                        println!("");
-                        println!(r#" music-discord-rpc -a "{}""#, player_list[0].identity());
-                        println!("");
-                        println!("You can use the -a argument multiple times to add more than one player to the allowlist:");
-                        println!("");
-                        println!(
-                            r#" music-discord-rpc -a "{}" -a "Second Player" -a "Any other player""#,
-                            player_list[0].identity()
-                        );
+
+                        // Find first non-playerctld player for usage examples
+                        if let Some(example_player) = player_list.iter()
+                            .find(|p| p.bus_name() != "org.mpris.MediaPlayer2.playerctld")
+                        {
+                            println!("");
+                            println!("Use the name or bus name to choose from which source the script should take data for the Discord status.");
+                            println!("Usage instructions:");
+                            println!("");
+                            println!(r#" music-discord-rpc -a "{}""#, example_player.identity());
+                            println!(r#" music-discord-rpc -a "{}""#, example_player.bus_name());
+                            println!("");
+                            println!("You can use the -a argument multiple times to add more than one player to the allowlist:");
+                            println!("");
+                            println!(
+                                r#" music-discord-rpc -a "{}" -a "Second Player" -a "Any other player""#,
+                                example_player.identity()
+                            );
+                        }
                     }
                 }
                 Err(_) => {
@@ -277,39 +316,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Find active player (and filter them by name if enabled)
         #[cfg(target_os = "linux")]
-        let player_finder = if allowlist_enabled {
+        let selected_player = if allowlist_enabled {
             let mut allowlist_finder = Err(mpris::FindingError::NoPlayerFound);
 
-            // Find all players and sort them by allow list order then return the first one
-            if let Ok(all_players) = player.find_all() {
-                let mut found_players: Vec<_> = all_players
+            // Find all players and select by priority
+            if let Ok(all_players) = player_finder.find_all() {
+                let mut candidates_with_priority: Vec<_> = all_players
                     .into_iter()
-                    .filter(|p| {
-                        !p.bus_name().eq("org.mpris.MediaPlayer2.playerctld")
-                            && settings.allowlist.contains(&p.identity().to_string())
+                    .filter_map(|p| {
+                        if p.bus_name() == "org.mpris.MediaPlayer2.playerctld" {
+                            return None;
+                        }
+
+                        let identity = p.identity();
+                        let bus_name = p.bus_name();
+                        let allowlist_pos = settings.allowlist.iter()
+                            .position(|pattern| {
+                                matches_allowlist(identity, pattern) || matches_allowlist(bus_name, pattern)
+                            })?;
+
+                        let status_priority = get_playback_priority(&p);
+                        let metadata_quality = p.get_metadata().ok()
+                            .map(|meta| if has_valid_metadata(&meta) { 0 } else { 1 })
+                            .unwrap_or(1);
+                        // Use bus_name as final tiebreaker for deterministic selection
+                        let bus_name_owned = bus_name.to_string();
+                        Some((p, (status_priority, allowlist_pos, metadata_quality, bus_name_owned)))
                     })
                     .collect();
 
-                if !found_players.is_empty() {
-                    found_players.sort_by_key(|p| {
-                        settings
-                            .allowlist
-                            .iter()
-                            .position(|allowlisted_name| allowlisted_name == p.identity())
-                            .unwrap_or(usize::MAX)
-                    });
-
-                    allowlist_finder = Ok(found_players.remove(0));
+                if let Some(best_idx) = candidates_with_priority.iter()
+                    .enumerate()
+                    .min_by_key(|(_, (_, priority_tuple))| priority_tuple)
+                    .map(|(idx, _)| idx)
+                {
+                    allowlist_finder = Ok(candidates_with_priority.swap_remove(best_idx).0);
                 }
             }
             allowlist_finder
         } else {
-            player.find_active()
+            player_finder.find_active()
         };
 
         // Connect with player
         #[cfg(target_os = "linux")]
-        let player = match player_finder {
+        let player = match selected_player {
             Ok(player) => {
                 if player_notif != 1 {
                     println!("Found active player with MPRIS support.");
@@ -391,6 +442,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         #[cfg(target_os = "linux")]
         let mut player_name = player.identity().to_string();
+        #[cfg(target_os = "linux")]
+        let current_player_bus_name = player.bus_name().to_string();
         #[cfg(target_os = "macos")]
         let mut player_name = player.player_id.clone();
 
@@ -415,6 +468,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut player_id = utils::sanitize_name(&player_name);
 
         debug_log!(settings.debug_log, "player_name: {}", player_name);
+        #[cfg(target_os = "linux")]
+        debug_log!(settings.debug_log, "player_bus_name: {}", current_player_bus_name);
         debug_log!(settings.debug_log, "player_id: {}", player_id);
         debug_log!(
             settings.debug_log,
@@ -516,11 +571,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 break;
             }
 
-            if settings.only_when_playing && !media_info.is_playing {
+            if !media_info.is_playing {
                 is_interrupted = true;
-                utils::clear_activity(&mut is_activity_set, client);
-                sleep(Duration::from_secs(interval));
-                continue;
+                if settings.only_when_playing {
+                    utils::clear_activity(&mut is_activity_set, client);
+                    sleep(Duration::from_secs(interval));
+                    continue;
+                } else {
+                    #[cfg(target_os = "linux")]
+                    let should_reselect = {
+                        if let Ok(all_players) = player_finder.find_all() {
+                            all_players.into_iter().any(|p| {
+                                if p.bus_name() == "org.mpris.MediaPlayer2.playerctld"
+                                    || p.bus_name() == current_player_bus_name {
+                                    return false;
+                                }
+
+                                // If allowlist is enabled, only consider players on the allowlist
+                                if allowlist_enabled {
+                                    if !is_player_allowlisted(&p, &settings.allowlist) {
+                                        return false;
+                                    }
+                                }
+
+                                if get_playback_priority(&p) != 0 {
+                                    return false;
+                                }
+
+                                if let Ok(meta) = p.get_metadata() {
+                                    has_valid_metadata(&meta)
+                                } else {
+                                    false
+                                }
+                            })
+                        } else {
+                            false
+                        }
+                    };
+                    #[cfg(target_os = "macos")]
+                    let should_reselect = false;
+
+                    if should_reselect {
+                        sleep(Duration::from_secs(interval));
+                        break;
+                    }
+                }
             }
 
             let album_id = format!("{} - {}", media_info.album_artist, media_info.album);
