@@ -19,9 +19,9 @@ jobs:
                 include:
                     - os: ubuntu-latest
                       target: music-discord-rpc
-                    - os: macos-13
+                    - os: macos-14-large
                       target: music-discord-rpc-macos-amd64 # Intel macOS
-                    - os: macos-14
+                    - os: macos-latest
                       target: music-discord-rpc-macos-arm64 # Apple Silicon macOS
 
         steps:
