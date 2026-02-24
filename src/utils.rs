@@ -5,6 +5,7 @@ use reqwest::blocking::Client;
 use reqwest::header::USER_AGENT;
 use serde_json;
 use std::env;
+use url_escape;
 
 #[cfg(target_os = "linux")]
 use mpris::Player;
@@ -637,4 +638,69 @@ pub fn app_name_from_bundle_id(bundle_id: &str) -> String {
     };
 
     name.to_string()
+}
+
+// Functions used to trim values to 256 bytes (Discord RPC limitation)
+pub fn trim_to_max_bytes(mut input: String, max: usize) -> String {
+    if input.len() <= max {
+        return input;
+    }
+
+    let mut end = max;
+
+    while !input.is_char_boundary(end) {
+        end -= 1;
+    }
+
+    input.truncate(end);
+    input
+}
+
+const MAX_URL_LEN: usize = 256;
+
+fn encoded_len_of_byte(b: u8) -> usize {
+    match b {
+        b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => 1,
+        _ => 3,
+    }
+}
+
+pub fn build_trimmed_url(prefix: &str, component: &str) -> String {
+    let encoded = url_escape::encode_component(component);
+    let full_url = format!("{prefix}{encoded}");
+
+    if full_url.len() <= MAX_URL_LEN {
+        return full_url;
+    }
+
+    let prefix_len = prefix.len();
+
+    // if prefix_len >= MAX_URL_LEN {
+    //     return prefix[..MAX_URL_LEN].to_string();
+    // }
+
+    let remaining = MAX_URL_LEN - prefix_len;
+
+    let mut encoded_len = 0;
+    let mut end = 0;
+
+    for (idx, ch) in component.char_indices() {
+        let mut char_encoded_len = 0;
+
+        for &b in ch.encode_utf8(&mut [0; 4]).as_bytes() {
+            char_encoded_len += encoded_len_of_byte(b);
+        }
+
+        if encoded_len + char_encoded_len > remaining {
+            break;
+        }
+
+        encoded_len += char_encoded_len;
+        end = idx + ch.len_utf8();
+    }
+
+    let trimmed = &component[..end];
+    let encoded = url_escape::encode_component(trimmed);
+
+    format!("{prefix}{encoded}")
 }

@@ -691,21 +691,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Set activity
             let song_name: String = format!("{} - {}", media_info.artist, media_info.title);
             let title = if media_info.title.len() > 1 {
-                media_info.title
+                utils::trim_to_max_bytes(media_info.title, 256)
             } else {
                 format!("{} ", media_info.title) // Discord activity min 2 char len bug fix
             };
             let artist = match rpc_name.as_str() {
                 "artist" => {
                     if media_info.artist.len() > 1 {
-                        media_info.artist
+                        utils::trim_to_max_bytes(media_info.artist, 256)
                     } else {
                         format!("{} ", media_info.artist) // Discord activity min 2 char len bug fix
                     }
                 }
-                _ => format!("by: {}", media_info.artist),
+                _ => utils::trim_to_max_bytes(format!("by: {}", media_info.artist), 256),
             };
-            let album = format!("album: {}", media_info.album);
+            let album = utils::trim_to_max_bytes(format!("album: {}", media_info.album), 256);
             let status_text: String = if media_info.is_playing {
                 "playing".to_string()
             } else {
@@ -784,9 +784,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             // Create urls for activity links
-            let yt_url: String = format!(
-                "https://www.youtube.com/results?search_query={}",
-                url_escape::encode_component(&song_name)
+            let yt_url = utils::build_trimmed_url(
+                "https://www.youtube.com/results?search_query=",
+                &song_name,
             );
             let lastfm_url: String = format!(
                 "https://www.last.fm/user/{}",
