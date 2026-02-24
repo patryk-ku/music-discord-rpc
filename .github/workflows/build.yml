@@ -66,8 +66,9 @@ jobs:
               if: runner.os == 'Linux'
               run: |
                   cargo install cargo-appimage
-                  cargo appimage
+                  cargo appimage -v
                   ls target/appimage
+                  ls target
 
             - name: Package tar.gz and prepare artifact (macOS)
               if: runner.os == 'macOS'
