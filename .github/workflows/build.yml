@@ -18,8 +18,8 @@ jobs:
                       target: music-discord-rpc
                     # - os: macos-14-large
                     #   target: music-discord-rpc-macos-amd64 # Intel macOS
-                    # - os: macos-latest
-                    #   target: music-discord-rpc-macos-arm64 # Apple Silicon macOS
+                    - os: macos-latest
+                      target: music-discord-rpc-macos-arm64 # Apple Silicon macOS
 
         steps:
             - uses: actions/checkout@v4
@@ -62,13 +62,11 @@ jobs:
               run: |
                   nfpm package --packager rpm --config nfpm.yaml --target target/release/music-discord-rpc.rpm
 
-            - name: Create .AppImage package
-              if: runner.os == 'Linux'
-              run: |
-                  cargo install cargo-appimage
-                  cargo appimage -v
-                  ls target/appimage
-                  ls target
+            # - name: Create .AppImage package
+            #   if: runner.os == 'Linux'
+            #   run: |
+            #       cargo install cargo-appimage
+            #       cargo appimage
 
             - name: Package tar.gz and prepare artifact (macOS)
               if: runner.os == 'macOS'
@@ -83,8 +81,8 @@ jobs:
                   mv target/release/music-discord-rpc artifact
                   mv target/release/music-discord-rpc.deb artifact
                   mv target/release/music-discord-rpc.rpm artifact
-                  mv target/appimage/music-discord-rpc.AppImage artifact
-
+            # mv target/appimage/music-discord-rpc.AppImage artifact
+            
             - name: Upload artifact
               uses: actions/upload-artifact@v4
               with:
