@@ -2,6 +2,9 @@ name: build
 
 on: workflow_dispatch
 
+permissions:
+    contents: write
+
 env:
     CARGO_TERM_COLOR: always
 
@@ -17,9 +20,6 @@ jobs:
                       target: music-discord-rpc-macos-amd64 # Intel macOS
                     - os: macos-14
                       target: music-discord-rpc-macos-arm64 # Apple Silicon macOS
-
-        permissions:
-            contents: write
 
         steps:
             - uses: actions/checkout@v4
@@ -68,20 +68,23 @@ jobs:
                   cargo install cargo-appimage
                   cargo appimage
 
-            - name: Package tar.gz (macOS only)
+            - name: Package tar.gz and prepare artifact (macOS)
               if: runner.os == 'macOS'
               run: |
-                  tar -czf target/release/${{ matrix.target }}.tar.gz -C target/release music-discord-rpc
-                  rm target/release/music-discord-rpc
+                  mkdir artifact
+                  tar -czf artifact/${{ matrix.target }}.tar.gz -C target/release music-discord-rpc
 
-            - name: Upload binaries and packages
+            - name: Prepare artifact (Linux)
+              if: runner.os == 'Linux'
+              run: |
+                  mkdir artifact
+                  mv target/release/music-discord-rpc artifact
+                  mv target/release/music-discord-rpc.deb artifact
+                  mv target/release/music-discord-rpc.rpm artifact
+                  mv target/appimage/music-discord-rpc.AppImage artifact
+
+            - name: Upload artifact
               uses: actions/upload-artifact@v4
               with:
-                  name: artifacts-${{ matrix.target }}
-                  path: |
-                      target/release/music-discord-rpc
-                      target/release/music-discord-rpc.deb
-                      target/release/music-discord-rpc.rpm
-                      target/appimage/music-discord-rpc.AppImage
-                      target/release/${{ matrix.target }}.tar.gz
-                  if-no-files-found: ignore
+                  name: music-discord-rpc-${{ matrix.os }}
+                  path: artifact
