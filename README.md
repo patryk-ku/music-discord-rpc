@@ -1,30 +1,38 @@
-# music-discord-rpc ![GitHub Release](https://img.shields.io/github/v/release/patryk-ku/music-discord-rpc?label=%20) ![License](https://img.shields.io/badge/MIT-blue) ![Rust](https://img.shields.io/badge/Rust-%23000000.svg?e&logo=rust&logoColor=white&color=CE412B) ![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black) ![macOS](https://img.shields.io/badge/MacOS-000000?logo=apple&logoColor=F0F0F0)
+<h1 align="center">music-discord-rpc</h1>
+
+<p align="center">
+<img alt="GitHub Release" src="https://img.shields.io/github/v/release/patryk-ku/music-discord-rpc?label=%20">
+<img alt="License" src="https://img.shields.io/badge/MIT-blue">
+<img alt="Rust" src="https://img.shields.io/badge/Rust-%23000000.svg?e&logo=rust&logoColor=white&color=CE412B">
+<img alt="Linux" src="https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black">
+<img alt="macOS" src="https://img.shields.io/badge/MacOS-000000?logo=apple&logoColor=F0F0F0">
+</p>
 
 <p align="center">
 <img src=".github/assets/demo.png"/>
 </p>
 
-Cross-platform Discord rich presence for music with **album cover and progress bar support**. You can customize additional buttons, such as linking to your Last.fm profile or searching for the current song on YouTube. There's also an option to display either the music player's icon or your Last.fm avatar next to the album cover. Album covers are fetched from Last.fm, with MusicBrainz used as a fallback. The application is written in Rust.
+Cross-platform Discord rich presence for music with **album cover and progress bar support**. You can customize additional buttons, such as linking to your Last.fm profile or searching for the current song on YouTube. There's also an option to display either the music player's icon or your Last.fm avatar next to the album cover. Album covers are fetched from Last.fm, with MusicBrainz used as a fallback.
 
-## Supported players
+### Compatibility info:
 
-### Linux
-
-Any player or app with [MPRIS](https://wiki.archlinux.org/title/MPRIS) support. Basically nearly every music application on Linux supports MRPIS in some way so there are plenty of compatible players. Web browsers also support MPRIS so this will work even with music streaming services playing in Google Chrome or Firefox.
-
-### MacOS
-
-The macOS version uses [media-control](https://github.com/ungive/media-control) to retrieve information about the currently playing song. From what I understand, media-control can extract information from most if not all music players, but I cannot guarantee this 100%.
-
-## Requirements
-
-### Linux
-
-Any fairly new 64-bit Linux distribution. It will probably also work on older versions of Linux but would have to be manually compiled on an older system. The optional background service and automatic startup capabilities rely on systemd or XDG Autostart.
-
-### MacOS
-
-It works both on Intel-based Macs and the newer ones with Apple Silicon.
+<table>
+  <tr>
+    <th></th>
+    <th>Linux</th>
+    <th>MacOS</th>
+  </tr>
+  <tr>
+  <td>Supported players</td>
+  <td>Any player or app with <a href="https://wiki.archlinux.org/title/MPRIS">MPRIS</a> support. Basically nearly every music application on Linux supports MRPIS in some way so there are plenty of     compatible players. Web browsers also support MPRIS so this will work even with music streaming services playing in browser.</td>
+  <td>The macOS version uses <a href="https://github.com/ungive/media-control">media-control</a> to retrieve information about the currently playing song. From what I understand, media-control can extract information from most if not all music players, but I cannot guarantee this 100%.</td>
+  </tr>
+  <tr>
+    <td>Requirements</td>
+    <td>Any fairly new 64-bit Linux distribution. It will probably also work on older versions of Linux but would have to be manually compiled on an older system. The optional background service and autostart capabilities rely on systemd or XDG Autostart.</td>
+    <td>It works both on Intel-based Macs and the newer ones with Apple Silicon.</td>
+  </tr>
+</table>
 
 ## Installation
 
@@ -233,6 +241,8 @@ Options:
           Print version
 ```
 
+---
+
 ### Autostart
 
 #### Linux
@@ -290,6 +300,8 @@ Restart app:
 brew services restart music-discord-rpc
 ```
 
+---
+
 ### Config
 
 The application will generate a configuration file at `~/.config/music-discord-rpc/config.yaml` when you run it for the first time. You can reset or regenerate it with `--reset-config`. You can also check default config file here: [config.yaml](config.yaml).
@@ -305,6 +317,8 @@ brew services restart music-discord-rpc
 ```
 
 Keep in mind that when using XDG Autostart, there's no built-in way to restart the service after changing the config. Config updates will only take effect after reboot. You can manually kill the process and restart it in the background as a workaround.
+
+---
 
 ### Allowlist
 
@@ -326,6 +340,8 @@ allowlist:
 ```
 
 Use the `-l`, `--list-players` to get your player name.
+
+---
 
 ### "Watching Video" activity
 
@@ -362,6 +378,8 @@ GNOME (not tested):
 > [!CAUTION]
 > Using this RPC with browser extensions can potentially compromise your privacy. Most videos played in the browser will be displayed as your activity, including content from sites like Instagram, FB, Twitter, etc. Even NSFW content might be displayed with thumbnails, which could result in a ban from Discord or removal from servers. You can disable thumbnail display using the `--disable-mpris-art-url` argument or by setting `disable_mpris_art_url` to true in the config file.
 
+---
+
 ### "Listening to ..."
 
 You can choose what shows up after "Listening to" on the Discord user list: artist name, song title, or just "Music" (default: artist).
@@ -385,6 +403,8 @@ example:
 | `artist`  | Listening to **Rick Astley**                      |
 | `track`   | Listening to **Never Gonna Give You Up**          |
 | `none`    | Listening to **Music**                            |
+
+---
 
 ### Buttons
 
@@ -418,6 +438,8 @@ lastfm_name: "nickname"
 > After Discord recent profile layout update, users cannot see their activity buttons anymore, BUT other users can see them. This is not a bug but a feature from Discord. You can make sure the buttons work by logging into an alternative account in your browser, or just by asking a friend :)
 
 > You can request more buttons by opening an Issue.
+
+---
 
 ### The icon next to the album cover
 
@@ -460,6 +482,8 @@ Icons are available for these ids: `amberol`, `audacious`, `chrome`, `elisa`, `f
 - Player ID (obtainable by running `music-discord-rpc --get-player-id`)
 
 Icons are managed through Discord Developer Portal, so no app update is needed after adding new ones.
+
+---
 
 ### Flatpak Discord fix
 
