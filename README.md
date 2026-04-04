@@ -52,6 +52,10 @@ brew install patryk-ku/music-discord-rpc/music-discord-rpc
 
 ### Debian, Ubuntu, Mint and derivatives (.deb)
 
+<a href="https://github.com/patryk-ku/music-discord-rpc/releases/latest/download/music-discord-rpc.deb">
+  <img alt="Linux deb" src="https://img.shields.io/badge/.deb-tomato?style=for-the-badge&label=x64&labelColor=grey">
+</a>
+
 <details>
   <summary>Instructions</summary>
 
@@ -66,6 +70,10 @@ sudo dpkg -i music-discord-rpc.deb
 </details>
 
 ### Fedora, openSUSE and derivatives (.rpm)
+
+<a href="https://github.com/patryk-ku/music-discord-rpc/releases/latest/download/music-discord-rpc.rpm">
+  <img alt="Linux rpm" src="https://img.shields.io/badge/.rpm-firebrick?style=for-the-badge&label=x64&labelColor=grey">
+</a>
 
 <details>
   <summary>Instructions</summary>
@@ -91,6 +99,10 @@ sudo zypper install music-discord-rpc.rpm
 </details>
 
 ### Arch, Manjaro, EndeavourOS and derivatives (AUR)
+
+<a href="https://aur.archlinux.org/packages/music-discord-rpc-bin">
+  <img alt="Linux AUR" src="https://img.shields.io/badge/AUR-0090DF?style=for-the-badge&label=x64&labelColor=grey">
+</a>
 
 <details>
   <summary>Instructions</summary>
@@ -137,6 +149,9 @@ Note that officially supported platform is x86_64 on glibc only, the rest aren't
 </details>
 
 ### Other Distributions
+
+<a href="https://github.com/patryk-ku/music-discord-rpc/releases/download/v0.6.2/music-discord-rpc.AppImage"><img alt="Linux AppImage" src="https://img.shields.io/badge/.AppImage-5a91b8?style=for-the-badge&label=x64&labelColor=grey"></a>&nbsp;
+<a href="https://github.com/patryk-ku/music-discord-rpc/releases/latest/download/music-discord-rpc"><img alt="Linux bin" src="https://img.shields.io/badge/Bin-lightgrey?style=for-the-badge&label=x64&labelColor=grey"></a>
 
 <details>
   <summary>Instructions</summary>
