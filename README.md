@@ -3,6 +3,7 @@
 <p align="center">
 <img alt="GitHub Release" src="https://img.shields.io/github/v/release/patryk-ku/music-discord-rpc?label=%20">
 <img alt="License" src="https://img.shields.io/badge/MIT-blue">
+<img alt="GitHub Downloads (all assets, all releases)" src="https://img.shields.io/github/downloads/patryk-ku/music-discord-rpc/total">
 <img alt="Rust" src="https://img.shields.io/badge/Rust-%23000000.svg?e&logo=rust&logoColor=white&color=CE412B">
 <img alt="Linux" src="https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black">
 <img alt="macOS" src="https://img.shields.io/badge/MacOS-000000?logo=apple&logoColor=F0F0F0">
