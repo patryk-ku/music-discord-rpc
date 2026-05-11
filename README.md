@@ -473,7 +473,7 @@ config:
 small_image: player
 ```
 
-Available music player icons: `Amberol`, `Audacious`, `Elisa`, `Finamp`, `Firefox`, `fooyin`, `GNOME Music`, `Google Chrome`, `Lollypop`, `Mozilla Firefox`, `mpv`, `Plexamp`, `Spotify`, `Strawberry`, `Tauon`, `TIDAL Hi-Fi`, `VLC Media Player`, `YouTube`, `Zen Browser`.
+Available music player icons: `Amberol`, `Audacious`, `Elisa`, `Finamp`, `Firefox`, `fooyin`, `Gelly`, `GNOME Music`, `Google Chrome`, `Lollypop`, `Mozilla Firefox`, `mpv`, `Plexamp`, `Spotify`, `Strawberry`, `Tauon`, `TIDAL Hi-Fi`, `VLC Media Player`, `YouTube`, `Zen Browser`.
 
 You can also force a different player icon and name to be displayed than the one actually used.
 
@@ -490,7 +490,7 @@ force_player_id: "vlc_media_player"
 force_player_name: "VLC media player"
 ```
 
-Icons are available for these ids: `amberol`, `audacious`, `chrome`, `elisa`, `finamp`, `firefox`, `fooyin`, `lollypop`, `mozilla_firefox`, `mozilla_zen`, `mpv`, `music`, `plexamp`, `spotify`, `strawberry`, `tauon`, `tidalhifi`, `vlc_media_player`, `youtube`.
+Icons are available for these ids: `amberol`, `audacious`, `chrome`, `elisa`, `finamp`, `firefox`, `fooyin`, `gelly`, `lollypop`, `mozilla_firefox`, `mozilla_zen`, `mpv`, `music`, `plexamp`, `spotify`, `strawberry`, `tauon`, `tidalhifi`, `vlc_media_player`, `youtube`.
 
 **Missing your player icon?** Open an Issue with:
 
