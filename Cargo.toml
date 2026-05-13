@@ -9,18 +9,18 @@ license = "MIT"
 
 [dependencies]
 discord-rich-presence = { git = "https://github.com/vionya/discord-rich-presence", branch = "main" }
-reqwest = { version = "0.12", features = ["blocking", "json"] }
+reqwest = { version = "0.13.3", features = ["blocking", "json"] }
 url-escape = "0.1.1"
-serde_json = "1.0.141"
-clap = { version = "4.5.42", features = ["derive"] }
+serde_json = "1.0.149"
+clap = { version = "4.6.1", features = ["derive"] }
 pickledb = "0.5.1"
 clap-serde-derive = "0.2.1"
-serde = { version = "1.0.219", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
 serde_yaml = "0.9.34"
 
 # Linux dependencies
 [target.'cfg(target_os = "linux")'.dependencies]
-mpris = "2.0.1"
+mpris = "2.1.0"
 
 [profile.release]
 strip = true
