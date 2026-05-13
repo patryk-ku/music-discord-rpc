@@ -1,3 +1,8 @@
+## v0.7.0
+
+- Added an easy to use interactive config editor. To launch it use the `music-discord-rpc config` command.
+- Updated dependencies to latest versions.
+
 ## v0.6.3
 
 - Fixed an issue where Discord activity was not set if metadata fields (song title, artist, YT URL, etc.) exceeded the 256-byte limit.
