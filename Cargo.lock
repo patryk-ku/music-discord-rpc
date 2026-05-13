@@ -820,7 +820,7 @@ dependencies = [
 
 [[package]]
 name = "music-discord-rpc"
-version = "0.6.3"
+version = "0.7.0"
 dependencies = [
  "clap",
  "clap-serde-derive",
