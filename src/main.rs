@@ -13,6 +13,7 @@ use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
+mod config_editor;
 mod settings;
 mod utils;
 
@@ -53,6 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Some(settings::Commands::Restart {}) => utils::restart_service(),
+        Some(settings::Commands::Config {}) => config_editor::setup(),
         None => {}
     }
     #[cfg(target_os = "macos")]
