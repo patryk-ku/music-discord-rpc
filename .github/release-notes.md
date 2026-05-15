@@ -1,2 +1,3 @@
 - Added an easy to use interactive config editor. To launch it use the `music-discord-rpc config` command.
+- Finally added automatic switching between active players from the allowlist (#44). Player priority order: playing > has metadata > allowlist order.
 - Updated dependencies to latest versions.
