@@ -280,74 +280,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Find active player (and filter them by name if enabled)
         #[cfg(target_os = "linux")]
         let player_finder = if allowlist_enabled {
-            let mut allowlist_finder = Err(mpris::FindingError::NoPlayerFound);
-
-            // Find all players and sort them by allow list order then return the first one
-            if let Ok(all_players) = player.find_all() {
-                let mut found_players: Vec<_> = all_players
-                    .into_iter()
-                    .filter(|p| {
-                        !p.bus_name().eq("org.mpris.MediaPlayer2.playerctld")
-                            && settings.allowlist.contains(&p.identity().to_string())
-                    })
-                    .collect();
-
-                if !found_players.is_empty() {
-                    debug_log!(settings.debug_log, "Allowlist sorting:");
-                    // Allowlist sorting priority: playing > has metadata > allowlist order
-                    found_players.sort_by_key(|p| {
-                        // Check if player is currently playing
-                        let is_playing = p
-                            .get_playback_status()
-                            .unwrap_or(mpris::PlaybackStatus::Stopped)
-                            == mpris::PlaybackStatus::Playing;
-
-                        // Check if metadata is complete (artist, title, and album)
-                        let mut is_metadata_complete = false;
-                        if let Ok(m) = p.get_metadata() {
-                            let has_artist = match m.artists() {
-                                Some(a) => !a.is_empty(),
-                                None => false,
-                            };
-                            let has_title = match m.title() {
-                                Some(t) => !t.is_empty(),
-                                None => false,
-                            };
-                            let has_album = match m.album_name() {
-                                Some(a) => !a.is_empty(),
-                                None => false,
-                            };
-                            is_metadata_complete = has_artist && has_title && has_album;
-                        }
-
-                        debug_log!(
-                            settings.debug_log,
-                            " - {}, playing: {}, metadata: {}",
-                            p.identity(),
-                            is_playing,
-                            is_metadata_complete
-                        );
-
-                        (
-                            !is_playing,
-                            !is_metadata_complete,
-                            settings
-                                .allowlist
-                                .iter()
-                                .position(|allowlisted_name| allowlisted_name == p.identity())
-                                .unwrap_or(usize::MAX),
-                        )
-                    });
-
-                    debug_log!(
-                        settings.debug_log,
-                        "Selected player: {}",
-                        found_players[0].identity()
-                    );
-                    allowlist_finder = Ok(found_players.remove(0));
-                }
-            }
-            allowlist_finder
+            utils::allowlist_player_finder(&player, &settings.allowlist, settings.debug_log)
         } else {
             player.find_active()
         };
@@ -531,6 +464,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 settings.debug_log,
                 "───────────────────────────────Loop─2───────────────────────────────────"
             );
+
+            // Check if should switch for other mpris source
+            #[cfg(target_os = "linux")]
+            {
+                let new_player = match PlayerFinder::new() {
+                    Ok(player) => {
+                        dbus_notif = false;
+                        if allowlist_enabled {
+                            utils::allowlist_player_finder(
+                                &player,
+                                &settings.allowlist,
+                                settings.debug_log,
+                            )
+                        } else {
+                            player.find_active()
+                        }
+                    }
+                    Err(err) => {
+                        if !dbus_notif {
+                            println!("Could not connect to D-Bus: {}", err);
+                            dbus_notif = true;
+                        }
+                        sleep(Duration::from_secs(interval));
+                        break;
+                    }
+                };
+
+                if let Ok(new_p) = new_player {
+                    if new_p.identity() != player.identity() {
+                        debug_log!(settings.debug_log, "Detected player change.");
+                        utils::clear_activity(&mut is_activity_set, &mut client);
+                        // sleep(Duration::from_secs(interval));
+                        break;
+                    }
+                }
+            }
 
             // Get metadata from player
             #[cfg(target_os = "linux")]
