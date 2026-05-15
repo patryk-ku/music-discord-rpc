@@ -174,6 +174,8 @@ You can add the binary to your PATH or create an alias. Now the only thing left 
 
 If somehow the binary doesn't work on your distribution, there is also an `.AppImage` package available.
 
+> It's worth noting that the available .AppImage builds currently stop at version 0.6.2. Newer versions are not being published because, for reasons unknown to me, building them through GitHub Actions fails. I'd appreciate any help with this, because I genuinely have no idea why. They build perfectly fine locally and in my other repositories. If you need an .AppImage build, you can compile it manually.
+
 </details>
 
 > [!NOTE]
