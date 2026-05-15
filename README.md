@@ -197,7 +197,10 @@ Or just directly run it in the terminal:
 music-discord-rpc
 ```
 
-You can change the default settings using arguments or by editing config file. Launch executable with `-h` or `--help` for aditional info:
+> [!TIP]
+> Use new `music-discord-rpc config` command to lauch an easy to use interactive config editor.
+
+Launch executable with `-h` or `--help` for aditional info:
 
 ```
 music-discord-rpc --help
@@ -208,6 +211,7 @@ Commands:
   enable   Start RPC in the background and enable autostart
   disable  Stop RPC and disable autostart
   restart  Use to restart the service and reload the changed configuration file
+  config   Open interactive configuration editor
   help     Print this message or the help of the given subcommand(s)
 
 Options:
@@ -321,6 +325,10 @@ brew services restart music-discord-rpc
 ### Config
 
 The application will generate a configuration file at `~/.config/music-discord-rpc/config.yaml` when you run it for the first time. You can reset or regenerate it with `--reset-config`. You can also check default config file here: [config.yaml](config.yaml).
+
+There is also build in interactive config editor. To launch it use `music-discord-rpc config` command. Keep in mind that this will wipe out all comments and unused in this editor options from default config file.
+
+![](.github/assets/config_editor.png)
 
 After editing the file, run this command to reload service and apply the changes:
 
