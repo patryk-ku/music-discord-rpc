@@ -113,6 +113,12 @@ pub fn setup() {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    {
+        println!("Now run this command to reload service and apply the changes:");
+        println!("brew services restart music-discord-rpc");
+    }
+
     process::exit(0);
 }
 
