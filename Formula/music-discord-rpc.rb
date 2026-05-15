@@ -8,12 +8,12 @@ class MusicDiscordRpc < Formula
 
   on_intel do
     url "https://github.com/patryk-ku/music-discord-rpc/releases/download/v#{version}/music-discord-rpc-macos-amd64.tar.gz"
-    sha256 "88e9dbfa78faeb0727abb966f2c85e50f09b1177d9e2d904c8fa5eeb9fd1b824"
+    sha256 "c4b75ea355991d8d686d3baa5e91042c21d13076f88b07dac36eeb7c82a21644"
   end
 
   on_arm do
     url "https://github.com/patryk-ku/music-discord-rpc/releases/download/v#{version}/music-discord-rpc-macos-arm64.tar.gz"
-    sha256 "a057135b98968b36aa2bfb0029f44092f3ff7315c949eb98e3ab7617666a8f71"
+    sha256 "d288c751e83fed8e1ae27d40dabbbdc14242cc69079e205fae9d59d2cd522764"
   end
 
   def install
