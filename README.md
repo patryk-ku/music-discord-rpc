@@ -348,7 +348,7 @@ Keep in mind that when using XDG Autostart, there's no built-in way to restart t
 
 ### Allowlist
 
-To select the music players, use the `-a`,`--allowlist-add` argument or `allowlist` in the config file. This argument can be used multiple times to add more players. The order matters and the first is the most important.
+To select the music players, use the `-a`,`--allowlist-add` argument or `allowlist` in the config file. This argument can be used multiple times to add more players. The order matters and the first is the most important but allowlisted players that are actively playing music and provide complete metadata are given priority.
 
 arguments:
 
