@@ -8,7 +8,7 @@ use std::env;
 use url_escape;
 
 #[cfg(target_os = "linux")]
-use mpris::Player;
+use mpris::{FindingError, Player, PlayerFinder};
 #[cfg(target_os = "linux")]
 use std::time::Duration;
 #[cfg(target_os = "linux")]
@@ -703,4 +703,79 @@ pub fn build_trimmed_url(prefix: &str, component: &str) -> String {
     let encoded = url_escape::encode_component(trimmed);
 
     format!("{prefix}{encoded}")
+}
+
+#[cfg(target_os = "linux")]
+pub fn allowlist_player_finder(
+    player: &PlayerFinder,
+    allowlist: &Vec<String>,
+    debug_log: bool,
+) -> Result<Player, FindingError> {
+    let mut allowlist_finder = Err(mpris::FindingError::NoPlayerFound);
+
+    // Find all players and sort them by allow list order then return the first one
+    if let Ok(all_players) = player.find_all() {
+        let mut found_players: Vec<_> = all_players
+            .into_iter()
+            .filter(|p| {
+                !p.bus_name().eq("org.mpris.MediaPlayer2.playerctld")
+                    && allowlist.contains(&p.identity().to_string())
+            })
+            .collect();
+
+        if !found_players.is_empty() {
+            debug_log!(debug_log, "Allowlist sorting:");
+            // Allowlist sorting priority: playing > has metadata > allowlist order
+            found_players.sort_by_key(|p| {
+                // Check if player is currently playing
+                let is_playing = p
+                    .get_playback_status()
+                    .unwrap_or(mpris::PlaybackStatus::Stopped)
+                    == mpris::PlaybackStatus::Playing;
+
+                // Check if metadata is complete (artist, title, and album)
+                let mut is_metadata_complete = false;
+                if let Ok(m) = p.get_metadata() {
+                    let has_artist = match m.artists() {
+                        Some(a) => !a.is_empty(),
+                        None => false,
+                    };
+                    let has_title = match m.title() {
+                        Some(t) => !t.is_empty(),
+                        None => false,
+                    };
+                    let has_album = match m.album_name() {
+                        Some(a) => !a.is_empty(),
+                        None => false,
+                    };
+                    is_metadata_complete = has_artist && has_title && has_album;
+                }
+
+                debug_log!(
+                    debug_log,
+                    " - {}, playing: {}, metadata: {}",
+                    p.identity(),
+                    is_playing,
+                    is_metadata_complete
+                );
+
+                (
+                    !is_playing,
+                    !is_metadata_complete,
+                    allowlist
+                        .iter()
+                        .position(|allowlisted_name| allowlisted_name == p.identity())
+                        .unwrap_or(usize::MAX),
+                )
+            });
+
+            debug_log!(
+                debug_log,
+                "Selected player: {}",
+                found_players[0].identity()
+            );
+            allowlist_finder = Ok(found_players.remove(0));
+        }
+    }
+    allowlist_finder
 }

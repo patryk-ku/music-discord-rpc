@@ -13,6 +13,7 @@ use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
+mod config_editor;
 mod settings;
 mod utils;
 
@@ -53,6 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Some(settings::Commands::Restart {}) => utils::restart_service(),
+        Some(settings::Commands::Config {}) => config_editor::setup(),
         None => {}
     }
     #[cfg(target_os = "macos")]
@@ -278,31 +280,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Find active player (and filter them by name if enabled)
         #[cfg(target_os = "linux")]
         let player_finder = if allowlist_enabled {
-            let mut allowlist_finder = Err(mpris::FindingError::NoPlayerFound);
-
-            // Find all players and sort them by allow list order then return the first one
-            if let Ok(all_players) = player.find_all() {
-                let mut found_players: Vec<_> = all_players
-                    .into_iter()
-                    .filter(|p| {
-                        !p.bus_name().eq("org.mpris.MediaPlayer2.playerctld")
-                            && settings.allowlist.contains(&p.identity().to_string())
-                    })
-                    .collect();
-
-                if !found_players.is_empty() {
-                    found_players.sort_by_key(|p| {
-                        settings
-                            .allowlist
-                            .iter()
-                            .position(|allowlisted_name| allowlisted_name == p.identity())
-                            .unwrap_or(usize::MAX)
-                    });
-
-                    allowlist_finder = Ok(found_players.remove(0));
-                }
-            }
-            allowlist_finder
+            utils::allowlist_player_finder(&player, &settings.allowlist, settings.debug_log)
         } else {
             player.find_active()
         };
@@ -486,6 +464,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 settings.debug_log,
                 "───────────────────────────────Loop─2───────────────────────────────────"
             );
+
+            // Check if should switch for other mpris source
+            #[cfg(target_os = "linux")]
+            {
+                let new_player = match PlayerFinder::new() {
+                    Ok(player) => {
+                        dbus_notif = false;
+                        if allowlist_enabled {
+                            utils::allowlist_player_finder(
+                                &player,
+                                &settings.allowlist,
+                                settings.debug_log,
+                            )
+                        } else {
+                            player.find_active()
+                        }
+                    }
+                    Err(err) => {
+                        if !dbus_notif {
+                            println!("Could not connect to D-Bus: {}", err);
+                            dbus_notif = true;
+                        }
+                        sleep(Duration::from_secs(interval));
+                        break;
+                    }
+                };
+
+                if let Ok(new_p) = new_player {
+                    if new_p.identity() != player.identity() {
+                        debug_log!(settings.debug_log, "Detected player change.");
+                        utils::clear_activity(&mut is_activity_set, &mut client);
+                        // sleep(Duration::from_secs(interval));
+                        break;
+                    }
+                }
+            }
 
             // Get metadata from player
             #[cfg(target_os = "linux")]

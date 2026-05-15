@@ -2,7 +2,7 @@
 
 _pkgname=music-discord-rpc
 pkgname="${_pkgname}-bin"
-pkgver=0.6.3
+pkgver=0.7.0
 pkgrel=1
 pkgdesc='Cross-platform Discord rich presence for music with album cover and progress bar support.'
 url="https://github.com/patryk-ku/${_pkgname}"

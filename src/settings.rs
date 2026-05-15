@@ -127,10 +127,12 @@ pub enum Commands {
     },
     /// Use to restart the service and reload the changed configuration file.
     Restart {},
+    /// Open interactive configuration editor
+    Config {},
 }
 
 // Use to get config path, create new config or reset existing
-fn create_config_file(force: bool) -> (bool, PathBuf) {
+pub fn create_config_file(force: bool) -> (bool, PathBuf) {
     let mut config_file = match get_config_path() {
         Some(path) => path,
         None => {

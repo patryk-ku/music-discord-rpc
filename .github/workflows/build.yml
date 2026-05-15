@@ -81,8 +81,8 @@ jobs:
                   mv target/release/music-discord-rpc artifact
                   mv target/release/music-discord-rpc.deb artifact
                   mv target/release/music-discord-rpc.rpm artifact
-            # mv target/appimage/music-discord-rpc.AppImage artifact
-            
+              # mv target/appimage/music-discord-rpc.AppImage artifact
+
             - name: Upload artifact
               uses: actions/upload-artifact@v4
               with:
