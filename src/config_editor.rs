@@ -87,23 +87,29 @@ pub fn setup() {
     println!(
         "Tip: To restore default config with additional options and comments use --reset-config."
     );
-    println!("\nNow attempting to restart and enable the systemd service.");
-    println!("If no error message appears, you are all set up and no further action is required.");
 
-    // Reload and start
-    match process::Command::new("systemctl")
-        .arg("--user")
-        .arg("restart")
-        .arg("music-discord-rpc.service")
-        .status()
+    #[cfg(target_os = "linux")]
     {
-        Ok(_) => {
-            println!("Restarted user systemd service.");
-            utils::enable_service();
-        }
-        Err(_) => {
-            println!("Failed to restart user systemd service.");
-            process::exit(1);
+        println!("\nNow attempting to restart and enable the systemd service.");
+        println!(
+            "If no error message appears, you are all set up and no further action is required."
+        );
+
+        // Reload and start
+        match process::Command::new("systemctl")
+            .arg("--user")
+            .arg("restart")
+            .arg("music-discord-rpc.service")
+            .status()
+        {
+            Ok(_) => {
+                println!("Restarted user systemd service.");
+                utils::enable_service();
+            }
+            Err(_) => {
+                println!("Failed to restart user systemd service.");
+                process::exit(1);
+            }
         }
     }
 
