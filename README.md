@@ -90,6 +90,24 @@ Fedora
 ```sh
 sudo dnf install ./music-discord-rpc.rpm
 ```
+You could also do:
+Install RPM using DNF without adding the .rpm file to your system
+
+Go to the latest [Releases](https://github.com/patryk-ku/music-discord-rpc/releases) page.
+
+Right click the .rpm download link and click "copy link".
+
+Then finally
+
+``sh
+sudo dnf install <copied link>
+``
+
+Example:
+
+``sh
+sudo dnf install https://github.com/patryk-ku/music-discord-rpc/releases/download/v0.7.0/music-discord-rpc.rpm
+``
 
 openSUSE
 
