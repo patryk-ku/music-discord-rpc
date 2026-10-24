@@ -20,6 +20,8 @@ jobs:
                       target: music-discord-rpc-macos-amd64 # Intel macOS
                     - os: macos-latest
                       target: music-discord-rpc-macos-arm64 # Apple Silicon macOS
+                    - os: windows-latest
+                      target: music-discord-rpc-windows
 
         steps:
             - uses: actions/checkout@v4
@@ -68,11 +70,25 @@ jobs:
             #       cargo install cargo-appimage
             #       cargo appimage
 
+            - name: Create Windows installer
+              if: runner.os == 'Windows'
+              run: |
+                  cargo install cargo-wix
+                  cargo wix --no-build --target-bin-dir target\release --output target\release\music-discord-rpc.msi --include packaging\wix\main.wxs --nocapture
+                  ren "target\release\music-discord-rpc.exe" "music-discord-rpc-portable.exe"
+
             - name: Package tar.gz and prepare artifact (macOS)
               if: runner.os == 'macOS'
               run: |
                   mkdir artifact
                   tar -czf artifact/${{ matrix.target }}.tar.gz -C target/release music-discord-rpc
+
+            - name: Prepare artifact (Windows)
+              if: runner.os == 'Windows'
+              run: |
+                  mkdir artifact
+                  mv target/release/music-discord-rpc.msi artifact
+                  mv target/release/music-discord-rpc-portable.exe artifact
 
             - name: Prepare artifact (Linux)
               if: runner.os == 'Linux'
