@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, process};
 
 use crate::settings::create_config_file;
+#[cfg(target_os = "linux")]
 use crate::utils;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -117,6 +118,11 @@ pub fn setup() {
     {
         println!("Now run this command to reload service and apply the changes:");
         println!("brew services restart music-discord-rpc");
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        println!("\nPlease restart music-discord-rpc to apply the changes.");
     }
 
     process::exit(0);

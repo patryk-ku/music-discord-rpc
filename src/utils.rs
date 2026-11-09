@@ -4,15 +4,13 @@ use reqwest;
 use reqwest::blocking::Client;
 use reqwest::header::USER_AGENT;
 use serde_json;
-use std::env;
+use std::{env, fs, process};
 use url_escape;
 
 #[cfg(target_os = "linux")]
 use mpris::{FindingError, Player, PlayerFinder};
 #[cfg(target_os = "linux")]
 use std::time::Duration;
-#[cfg(target_os = "linux")]
-use std::{fs, process};
 
 // A common struct to hold song information, ensuring a consistent
 // return type regardless of the platform.
@@ -28,7 +26,7 @@ pub struct MediaInfo {
     pub is_track_position: bool,
     pub art_url: String, // Link to cover art on the internet
     pub url: String,     // Link to the currently playing media on the internet
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     pub player_id: String,
 }
 
@@ -148,8 +146,14 @@ pub fn restart_service() {
 pub fn get_config_path() -> Option<std::path::PathBuf> {
     if let Some(config_home) = env::var_os("XDG_CONFIG_HOME") {
         Some(std::path::PathBuf::from(config_home))
+    } else if let Some(appdata) = env::var_os("APPDATA") {
+        Some(std::path::PathBuf::from(appdata))
     } else if let Some(home_dir) = env::var_os("HOME") {
         let mut path = std::path::PathBuf::from(home_dir);
+        path.push(".config");
+        Some(path)
+    } else if let Some(userprofile) = env::var_os("USERPROFILE") {
+        let mut path = std::path::PathBuf::from(userprofile);
         path.push(".config");
         Some(path)
     } else {
@@ -222,6 +226,100 @@ pub fn remove_xdg_autostart() {
     process::exit(0);
 }
 
+#[cfg(target_os = "windows")]
+use std::path::PathBuf;
+
+#[cfg(target_os = "windows")]
+fn get_startup_dir() -> Option<PathBuf> {
+    env::var_os("APPDATA").map(|appdata| {
+        let mut path = PathBuf::from(appdata);
+        path.push("Microsoft");
+        path.push("Windows");
+        path.push("Start Menu");
+        path.push("Programs");
+        path.push("Startup");
+        path
+    })
+}
+
+#[cfg(target_os = "windows")]
+pub fn enable_autostart() {
+    let startup_dir = match get_startup_dir() {
+        Some(dir) => dir,
+        None => {
+            println!("WARNING: Failed to determine user Startup directory.");
+            process::exit(1);
+        }
+    };
+
+    if !startup_dir.exists() {
+        if let Err(_) = fs::create_dir_all(&startup_dir) {
+            println!("ERROR: Failed to create Startup directory.");
+            process::exit(1);
+        }
+    }
+
+    let exe_path = match env::current_exe() {
+        Ok(path) => path,
+        Err(_) => {
+            println!("ERROR: Failed to determine current executable path.");
+            process::exit(1);
+        }
+    };
+
+    let vbs_path = startup_dir.join("music-discord-rpc.vbs");
+    let vbs_content = format!(
+        "CreateObject(\"Wscript.Shell\").Run \"\"\"{}\"\"\", 0, False\r\n",
+        exe_path.display()
+    );
+
+    match fs::write(&vbs_path, vbs_content) {
+        Ok(_) => {
+            println!(
+                "Created autostart script in Startup folder: {}",
+                vbs_path.display()
+            );
+            println!("music-discord-rpc will now start automatically in the background when you log in.");
+        }
+        Err(_) => {
+            println!("ERROR: Failed to create autostart script in Startup folder.");
+            process::exit(1);
+        }
+    }
+
+    process::exit(0);
+}
+
+#[cfg(target_os = "windows")]
+pub fn disable_autostart() {
+    let startup_dir = match get_startup_dir() {
+        Some(dir) => dir,
+        None => {
+            println!("WARNING: Failed to determine user Startup directory.");
+            process::exit(1);
+        }
+    };
+
+    let vbs_path = startup_dir.join("music-discord-rpc.vbs");
+
+    if vbs_path.exists() {
+        match fs::remove_file(&vbs_path) {
+            Ok(_) => {
+                println!("Removed autostart script from Startup folder.");
+                println!("Autostart has been disabled.");
+            }
+            Err(_) => {
+                println!("ERROR: Failed to remove autostart script from Startup folder.");
+                process::exit(1);
+            }
+        }
+    } else {
+        println!("Autostart script does not exist.");
+    }
+
+    process::exit(0);
+}
+
 pub fn clear_activity(is_activity_set: &mut bool, client: &mut DiscordIpcClient) {
     if *is_activity_set {
         let is_activity_cleared = client.clear_activity().is_ok();
@@ -244,20 +342,14 @@ pub fn clear_activity(is_activity_set: &mut bool, client: &mut DiscordIpcClient)
 
 pub fn get_cover_url(
     album_id: &str,
-    album: &str,
+    album: &mut String,
     mut _cover_url: String,
     cache_enabled: bool,
     album_cache: &mut PickleDb,
     artist: &str,
     lastfm_api_key: &str,
+    track_title: &str,
 ) -> String {
-    // If no album or Unknown Album
-    if album.eq("Unknown Album") {
-        println!("Missing album name or Unknown Album.");
-
-        return String::from("missing-cover");
-    }
-
     // Load from cache if enabled
     if cache_enabled {
         let cache_url = if album_cache.exists(&album_id) {
@@ -274,24 +366,60 @@ pub fn get_cover_url(
         }
     }
 
-    let request_url = format!(
-    	"https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key={}&artist={}&album={}&autocorrect=0&format=json",
-     	lastfm_api_key,
-     	url_escape::encode_component(artist),
-     	url_escape::encode_component(album)
-    );
-
-    let mut url: String = match reqwest::blocking::get(request_url) {
-        Ok(res) => match res.json::<serde_json::Value>() {
-            Ok(data) => data["album"]["image"][3]["#text"].to_string(),
-            Err(_) => String::new(),
-        },
-        Err(_) => String::new(),
+    let is_unknown_album = album.as_str() == "Unknown Album";
+    let request_url = if is_unknown_album {
+        if track_title.trim().is_empty() {
+            println!("Missing album name or Unknown Album.");
+            return String::from("missing-cover");
+        }
+        format!(
+            "https://ws.audioscrobbler.com/2.0/?method=track.getInfo&api_key={}&artist={}&track={}&autocorrect=1&format=json",
+            lastfm_api_key,
+            url_escape::encode_component(artist),
+            url_escape::encode_component(track_title)
+        )
+    } else {
+        format!(
+            "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key={}&artist={}&album={}&autocorrect=0&format=json",
+            lastfm_api_key,
+            url_escape::encode_component(artist),
+            url_escape::encode_component(album)
+        )
     };
 
+    let (url, resolved_album) = match reqwest::blocking::get(request_url) {
+        Ok(res) => match res.json::<serde_json::Value>() {
+            Ok(data) => {
+                if is_unknown_album {
+                    let img = data["track"]["album"]["image"][3]["#text"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_string();
+                    let alb = data["track"]["album"]["title"]
+                        .as_str()
+                        .map(|s| s.to_string());
+                    (img, alb)
+                } else {
+                    let img = data["album"]["image"][3]["#text"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_string();
+                    (img, None)
+                }
+            }
+            Err(_) => (String::new(), None),
+        },
+        Err(_) => (String::new(), None),
+    };
+
+    if let Some(new_album) = resolved_album {
+        if !new_album.trim().is_empty() {
+            println!("[last.fm] resolved album name: {}", new_album);
+            *album = new_album;
+        }
+    }
+
     if !url.is_empty() && (url.len() > 5) {
-        url.pop();
-        url.remove(0);
         println!("[last.fm] fetched image link: {}", url);
 
         // Save cover url to cache
@@ -309,24 +437,115 @@ pub fn get_cover_url(
         return url;
     }
 
-    return String::from("missing-cover");
+    String::from("missing-cover")
+}
+
+pub fn get_cover_url_deezer(
+    artist: &str,
+    track_title: &str,
+    album_out: &mut String,
+) -> Option<String> {
+    let term = format!("{} {}", artist.trim().trim_end_matches('.'), track_title.trim());
+    let request_url = format!(
+        "https://api.deezer.com/search?q={}",
+        url_escape::encode_component(&term)
+    );
+
+    let client = Client::new();
+    let res = client
+        .get(request_url)
+        .header(USER_AGENT, "curl")
+        .send()
+        .ok()?;
+
+    let data: serde_json::Value = res.json().ok()?;
+    let results = data["data"].as_array()?;
+
+    let artist_norm = artist.trim().trim_end_matches('.').to_lowercase();
+    let title_norm = track_title.trim().to_lowercase();
+
+    for r in results {
+        let r_art = r["artist"]["name"].as_str().unwrap_or_default().trim().trim_end_matches('.').to_lowercase();
+        let r_trk = r["title"].as_str().unwrap_or_default().trim().to_lowercase();
+
+        let art_match = r_art == artist_norm || r_art.contains(&artist_norm) || artist_norm.contains(&r_art);
+        let trk_match = r_trk == title_norm || r_trk.contains(&title_norm) || title_norm.contains(&r_trk);
+
+        if art_match && trk_match {
+            if let Some(col_name) = r["album"]["title"].as_str() {
+                if !col_name.is_empty() && album_out.as_str() == "Unknown Album" {
+                    *album_out = col_name.to_string();
+                    println!("[deezer] resolved album name: {}", col_name);
+                }
+            }
+            if let Some(art_url) = r["album"]["cover_big"].as_str() {
+                println!("[deezer] fetched image link: {}", art_url);
+                return Some(art_url.to_string());
+            }
+        }
+    }
+
+    None
+}
+
+pub fn get_cover_url_itunes(
+    artist: &str,
+    track_title: &str,
+    album_out: &mut String,
+) -> Option<String> {
+    let term = format!("{} {}", artist.trim().trim_end_matches('.'), track_title.trim());
+    let request_url = format!(
+        "https://itunes.apple.com/search?term={}&entity=song&limit=5",
+        url_escape::encode_component(&term)
+    );
+
+    let client = Client::new();
+    let res = client
+        .get(request_url)
+        .header(USER_AGENT, "curl")
+        .send()
+        .ok()?;
+
+    let data: serde_json::Value = res.json().ok()?;
+    let results = data["results"].as_array()?;
+
+    let artist_norm = artist.trim().trim_end_matches('.').to_lowercase();
+    let title_norm = track_title.trim().to_lowercase();
+
+    for r in results {
+        let r_art = r["artistName"].as_str().unwrap_or_default().trim().trim_end_matches('.').to_lowercase();
+        let r_trk = r["trackName"].as_str().unwrap_or_default().trim().to_lowercase();
+
+        let art_match = r_art == artist_norm || r_art.contains(&artist_norm) || artist_norm.contains(&r_art);
+        let trk_match = r_trk == title_norm || r_trk.contains(&title_norm) || title_norm.contains(&r_trk);
+
+        if art_match && trk_match {
+            if let Some(col_name) = r["collectionName"].as_str() {
+                if !col_name.is_empty() && album_out.as_str() == "Unknown Album" {
+                    *album_out = col_name.to_string();
+                    println!("[itunes] resolved album name: {}", col_name);
+                }
+            }
+            if let Some(art_url) = r["artworkUrl100"].as_str() {
+                let high_res = art_url.replace("100x100bb", "512x512bb");
+                println!("[itunes] fetched image link: {}", high_res);
+                return Some(high_res);
+            }
+        }
+    }
+
+    None
 }
 
 pub fn get_cover_url_musicbrainz(
     album_id: &str,
-    album: &str,
+    album: &mut String,
     mut _cover_url: String,
     cache_enabled: bool,
     album_cache: &mut PickleDb,
     artist: &str,
+    track_title: &str,
 ) -> String {
-    // If no album or Unknown Album
-    if album.eq("Unknown Album") {
-        println!("Missing album name or Unknown Album.");
-
-        return String::from("missing-cover");
-    }
-
     // Load from cache if enabled
     if cache_enabled {
         let cache_url = if album_cache.exists(&album_id) {
@@ -348,63 +567,123 @@ pub fn get_cover_url_musicbrainz(
         VERSION
     );
 
-    let request_url = format!(
-    	"https://musicbrainz.org/ws/2/release/?query=artist:\"{}\"ANDrelease:\"{}\"&fmt=json&limit=1",
-    	url_escape::encode_component(artist),
-     	url_escape::encode_component(album)
-    );
+    let is_unknown_album = album.as_str() == "Unknown Album";
+    let request_url = if is_unknown_album {
+        if track_title.trim().is_empty() {
+            println!("Missing album name or Unknown Album.");
+            return String::from("missing-cover");
+        }
+        format!(
+            "https://musicbrainz.org/ws/2/recording/?query=recording:\"{}\"ANDartist:\"{}\"&fmt=json&limit=5",
+            url_escape::encode_component(track_title),
+            url_escape::encode_component(artist)
+        )
+    } else {
+        format!(
+            "https://musicbrainz.org/ws/2/release/?query=artist:\"{}\"ANDrelease:\"{}\"&fmt=json&limit=1",
+            url_escape::encode_component(artist),
+            url_escape::encode_component(album)
+        )
+    };
 
     let client = Client::new();
-    let mut mbid: String = match client
+    let (mbid, resolved_album) = match client
         .get(request_url)
         .header(USER_AGENT, &user_agent)
         .send()
     {
         Ok(res) => match res.json::<serde_json::Value>() {
-            Ok(data) => data["releases"][0]["id"].to_string(),
-            Err(_) => String::new(),
-        },
-        Err(_) => String::new(),
-    };
+            Ok(data) => {
+                if is_unknown_album {
+                    let mut found_id = String::new();
+                    let mut found_title = None;
+                    let artist_norm = artist.trim().trim_end_matches('.').to_lowercase();
+                    let title_norm = track_title.trim().to_lowercase();
 
-    if !mbid.is_empty() && (mbid.len() > 5) {
-        mbid.pop();
-        mbid.remove(0);
-    }
+                    if let Some(recordings) = data["recordings"].as_array() {
+                        for rec in recordings {
+                            let rec_title = rec["title"].as_str().unwrap_or_default().trim().to_lowercase();
+                            let artist_match = rec["artist-credit"].as_array().map(|credits| {
+                                credits.iter().any(|c| {
+                                    let name = c["name"].as_str().unwrap_or_default().trim().trim_end_matches('.').to_lowercase();
+                                    name == artist_norm || name.contains(&artist_norm) || artist_norm.contains(&name)
+                                })
+                            }).unwrap_or(false);
 
-    let mut url: String = match client
-        .get(format!("https://coverartarchive.org/release/{}/", mbid))
-        .header(USER_AGENT, &user_agent)
-        .send()
-    {
-        Ok(res) => match res.json::<serde_json::Value>() {
-            Ok(data) => data["images"][0]["thumbnails"]["small"].to_string(),
-            Err(_) => String::new(),
-        },
-        Err(_) => String::new(),
-    };
+                            let title_match = rec_title == title_norm
+                                || rec_title.contains(&title_norm)
+                                || title_norm.contains(&rec_title);
 
-    if !url.is_empty() && (url.len() > 5) {
-        url.pop();
-        url.remove(0);
-        println!("[musicbrainz] fetched image link: {}", url);
-
-        // Save cover url to cache
-        if cache_enabled {
-            match album_cache.set(&album_id, &url) {
-                Ok(_) => {
-                    println!("[cache] saved image url for: {}.", album_id)
-                }
-                Err(_) => {
-                    println!("[cache] error, unable to write to cache file.")
+                            if artist_match && title_match {
+                                if let Some(releases) = rec["releases"].as_array() {
+                                    if let Some(rel) = releases.first() {
+                                        if let Some(id) = rel["id"].as_str() {
+                                            found_id = id.to_string();
+                                            found_title = rel["title"].as_str().map(|s| s.to_string());
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    (found_id, found_title)
+                } else {
+                    let id = data["releases"][0]["id"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_string();
+                    (id, None)
                 }
             }
-        }
+            Err(_) => (String::new(), None),
+        },
+        Err(_) => (String::new(), None),
+    };
 
-        return url;
+    if let Some(new_album) = resolved_album {
+        if !new_album.trim().is_empty() {
+            println!("[musicbrainz] resolved album name: {}", new_album);
+            *album = new_album;
+        }
     }
 
-    return String::from("missing-cover");
+    if !mbid.is_empty() && (mbid.len() > 5) {
+        let url: String = match client
+            .get(format!("https://coverartarchive.org/release/{}/", mbid))
+            .header(USER_AGENT, &user_agent)
+            .send()
+        {
+            Ok(res) => match res.json::<serde_json::Value>() {
+                Ok(data) => data["images"][0]["thumbnails"]["small"].to_string(),
+                Err(_) => String::new(),
+            },
+            Err(_) => String::new(),
+        };
+
+        if !url.is_empty() && (url.len() > 5) {
+            let mut clean_url = url;
+            clean_url.pop();
+            clean_url.remove(0);
+            println!("[musicbrainz] fetched image link: {}", clean_url);
+
+            // Save cover url to cache
+            if cache_enabled {
+                match album_cache.set(&album_id, &clean_url) {
+                    Ok(_) => {
+                        println!("[cache] saved image url for: {}.", album_id)
+                    }
+                    Err(_) => {
+                        println!("[cache] error, unable to write to cache file.")
+                    }
+                }
+            }
+
+            return clean_url;
+        }
+    }
+
+    String::from("missing-cover")
 }
 
 pub fn get_lastfm_avatar(username: &str, lastfm_api_key: &str) -> String {
@@ -638,6 +917,309 @@ pub fn app_name_from_bundle_id(bundle_id: &str) -> String {
     };
 
     name.to_string()
+}
+
+#[cfg(target_os = "windows")]
+use windows::Media::Control::{
+    GlobalSystemMediaTransportControlsSession as WinSession,
+    GlobalSystemMediaTransportControlsSessionManager as SessionManager,
+    GlobalSystemMediaTransportControlsSessionPlaybackStatus,
+};
+
+#[cfg(target_os = "windows")]
+pub fn get_session_manager() -> Result<SessionManager, Box<dyn std::error::Error>> {
+    let async_op = SessionManager::RequestAsync()?;
+    let manager = async_op.join()?;
+    Ok(manager)
+}
+
+#[cfg(target_os = "windows")]
+pub fn get_available_players() -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let manager = get_session_manager()?;
+    let mut list = Vec::new();
+
+    if let Ok(sessions) = manager.GetSessions() {
+        let count = sessions.Size().unwrap_or(0);
+        for i in 0..count {
+            if let Ok(session) = sessions.GetAt(i) {
+                if let Ok(app_id) = session.SourceAppUserModelId() {
+                    let id_str = app_id.to_string();
+                    let name = app_name_from_app_id(&id_str);
+                    if !list.contains(&name) {
+                        list.push(name);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(list)
+}
+
+#[cfg(target_os = "windows")]
+fn session_media_props(
+    session: &WinSession,
+) -> Option<(String, String, String, String)> {
+    if let Ok(op) = session.TryGetMediaPropertiesAsync() {
+        if let Ok(props) = op.join() {
+            let title = props.Title().map(|s| s.to_string()).unwrap_or_default();
+            let artist = props.Artist().map(|s| s.to_string()).unwrap_or_default();
+            let album = props.AlbumTitle().map(|s| s.to_string()).unwrap_or_default();
+            let subtitle = props.Subtitle().map(|s| s.to_string()).unwrap_or_default();
+
+            // Ignore sessions without title or artist
+            if !title.trim().is_empty() || !artist.trim().is_empty() {
+                return Some((title, artist, album, subtitle));
+            }
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn session_playback_status(
+    session: &WinSession,
+) -> Option<GlobalSystemMediaTransportControlsSessionPlaybackStatus> {
+    session.GetPlaybackInfo().ok().and_then(|info| info.PlaybackStatus().ok())
+}
+
+#[cfg(target_os = "windows")]
+pub fn get_active_session(
+    manager: &SessionManager,
+    allowlist: &[String],
+    allowlist_enabled: bool,
+) -> Result<WinSession, Box<dyn std::error::Error>> {
+    let current_session = manager.GetCurrentSession().ok();
+
+    if allowlist_enabled && !allowlist.is_empty() {
+        if let Ok(sessions) = manager.GetSessions() {
+            let count = sessions.Size().unwrap_or(0);
+            let mut matched_sessions = Vec::new();
+
+            for i in 0..count {
+                if let Ok(session) = sessions.GetAt(i) {
+                    if let Ok(app_id) = session.SourceAppUserModelId() {
+                        let id_str = app_id.to_string();
+                        let clean_id = app_name_from_app_id(&id_str);
+                        let is_allowed = allowlist.iter().any(|allowed| {
+                            let a = allowed.to_lowercase();
+                            let id_low = id_str.to_lowercase();
+                            let clean_low = clean_id.to_lowercase();
+                            let sanitized_clean = sanitize_name(&clean_id);
+                            let sanitized_allowed = sanitize_name(allowed);
+                            id_low == a
+                                || clean_low == a
+                                || id_low.contains(&a)
+                                || clean_low.contains(&a)
+                                || sanitized_clean == sanitized_allowed
+                        });
+
+                        if is_allowed && session_media_props(&session).is_some() {
+                            matched_sessions.push(session);
+                        }
+                    }
+                }
+            }
+
+            // Prioritize focused session if it is on allowlist
+            if let Some(ref curr) = current_session {
+                if let Ok(curr_id) = curr.SourceAppUserModelId() {
+                    let curr_matches = matched_sessions.iter().any(|s| {
+                        s.SourceAppUserModelId().map(|id| id == curr_id).unwrap_or(false)
+                    });
+                    if curr_matches {
+                        if let Some(GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing) = session_playback_status(curr) {
+                            return Ok(curr.clone());
+                        }
+                    }
+                }
+            }
+
+            for session in &matched_sessions {
+                if let Some(GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing) = session_playback_status(session) {
+                    return Ok(session.clone());
+                }
+            }
+
+            if let Some(session) = matched_sessions.into_iter().next() {
+                return Ok(session);
+            }
+        }
+        return Err("Could not find any active player from your allowlist. Waiting for any player from your allowlist...".into());
+    }
+
+    // Check focused session first
+    if let Some(ref curr) = current_session {
+        if session_media_props(curr).is_some() {
+            return Ok(curr.clone());
+        }
+    }
+
+    // Fallback: search other active sessions
+    if let Ok(sessions) = manager.GetSessions() {
+        let count = sessions.Size().unwrap_or(0);
+        let mut first_valid_session = None;
+
+        for i in 0..count {
+            if let Ok(session) = sessions.GetAt(i) {
+                if session_media_props(&session).is_some() {
+                    if let Some(GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing) = session_playback_status(&session) {
+                        return Ok(session);
+                    }
+                    if first_valid_session.is_none() {
+                        first_valid_session = Some(session);
+                    }
+                }
+            }
+        }
+
+        if let Some(curr) = current_session {
+            if session_media_props(&curr).is_some() {
+                return Ok(curr);
+            }
+        }
+
+        if let Some(session) = first_valid_session {
+            return Ok(session);
+        }
+    }
+
+    Err("No media is currently playing. Waiting for any player...".into())
+}
+
+#[cfg(target_os = "windows")]
+pub fn get_currently_playing(
+    allowlist: &[String],
+    allowlist_enabled: bool,
+) -> NowPlayingResult {
+    let manager = get_session_manager()?;
+    let session = get_active_session(&manager, allowlist, allowlist_enabled)?;
+
+    let app_id = session
+        .SourceAppUserModelId()
+        .map(|s| s.to_string())
+        .unwrap_or_else(|_| "Unknown Player".to_string());
+
+    let player_id = app_name_from_app_id(&app_id);
+
+    let (title_raw, artist_raw, album_raw, subtitle_raw) = match session_media_props(&session) {
+        Some(props) => props,
+        None => return Err("No track information available. Waiting for any player...".into()),
+    };
+
+    let title = if title_raw.trim().is_empty() {
+        "Unknown Title".to_string()
+    } else {
+        title_raw.trim().to_string()
+    };
+
+    let artist = if artist_raw.trim().is_empty() {
+        "Unknown Artist".to_string()
+    } else {
+        artist_raw.trim().to_string()
+    };
+
+    let album_artist = artist.clone();
+
+    // Fallback to subtitle if album title is empty
+    let album = if !album_raw.trim().is_empty() {
+        album_raw.trim().to_string()
+    } else if !subtitle_raw.trim().is_empty() && subtitle_raw.trim().to_lowercase() != artist.to_lowercase() {
+        subtitle_raw.trim().to_string()
+    } else {
+        "Unknown Album".to_string()
+    };
+
+    let is_playing = match session_playback_status(&session) {
+        Some(GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing) => true,
+        _ => false,
+    };
+
+    let mut duration = 0u64;
+    let mut position = 0u64;
+    let mut is_track_position = false;
+
+    if let Ok(timeline) = session.GetTimelineProperties() {
+        if let Ok(end_time) = timeline.EndTime() {
+            let d = end_time.Duration / 10_000_000;
+            if d > 0 {
+                duration = d as u64;
+                is_track_position = true;
+            }
+        }
+        if let Ok(pos) = timeline.Position() {
+            let p = pos.Duration / 10_000_000;
+            if p >= 0 {
+                position = p as u64;
+            }
+        }
+    }
+
+    Ok(MediaInfo {
+        title,
+        artist,
+        album_artist,
+        album,
+        is_playing,
+        duration,
+        position,
+        is_track_position,
+        art_url: String::new(),
+        url: String::new(),
+        player_id,
+    })
+}
+
+#[cfg(target_os = "windows")]
+pub fn app_name_from_app_id(app_id: &str) -> String {
+    let lower = app_id.to_lowercase();
+    if lower.contains("spotify") {
+        "Spotify".to_string()
+    } else if lower.contains("youtube-music")
+        || lower.contains("ytmdesktop")
+        || lower.contains("th-ch")
+        || lower.contains("youtubemusic")
+    {
+        "YouTube Music".to_string()
+    } else if lower.contains("msedge") {
+        "Microsoft Edge".to_string()
+    } else if lower.contains("chrome") {
+        "Google Chrome".to_string()
+    } else if lower.contains("firefox") {
+        "Firefox".to_string()
+    } else if lower.contains("brave") {
+        "Brave".to_string()
+    } else if lower.contains("opera") {
+        "Opera".to_string()
+    } else if lower.contains("vivaldi") {
+        "Vivaldi".to_string()
+    } else if lower.contains("vlc") {
+        "VLC media player".to_string()
+    } else if lower.contains("foobar2000") {
+        "foobar2000".to_string()
+    } else if lower.contains("aimp") {
+        "AIMP".to_string()
+    } else if lower.contains("itunes") {
+        "iTunes".to_string()
+    } else if lower.contains("applemusic") || lower.contains("apple music") {
+        "Apple Music".to_string()
+    } else if lower.contains("cider") {
+        "Cider".to_string()
+    } else if lower.contains("yandex") {
+        "Yandex Music".to_string()
+    } else if lower.contains("music.ui") || lower.contains("zune") {
+        "Media Player".to_string()
+    } else if lower.contains("tidal") {
+        "TIDAL".to_string()
+    } else if lower.contains("deezer") {
+        "Deezer".to_string()
+    } else {
+        if let Some(stripped) = app_id.strip_suffix(".exe") {
+            stripped.to_string()
+        } else {
+            app_id.to_string()
+        }
+    }
 }
 
 // Functions used to trim values to 256 bytes (Discord RPC limitation)

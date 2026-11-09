@@ -25,7 +25,7 @@ const LASTFM_API_KEY: &'static str = match option_env!("LASTFM_API_KEY") {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Set home path, If $HOME is not set, do not write or read anything from the user's disk
-    let (home_exists, home_dir) = match env::var("HOME") {
+    let (home_exists, home_dir) = match env::var("HOME").or_else(|_| env::var("USERPROFILE")) {
         Ok(val) => (true, PathBuf::from(val)),
         Err(_) => (false, PathBuf::from("/")),
     };
@@ -64,6 +64,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!(
                 "Check: https://github.com/patryk-ku/music-discord-rpc?tab=readme-ov-file#macos-3"
             );
+            std::process::exit(0);
+        }
+        None => {}
+    }
+    #[cfg(target_os = "windows")]
+    match settings.suboptions.command {
+        Some(settings::Commands::Enable { .. }) => utils::enable_autostart(),
+        Some(settings::Commands::Disable { .. }) => utils::disable_autostart(),
+        Some(settings::Commands::Config {}) => config_editor::setup(),
+        Some(settings::Commands::Restart {}) => {
+            println!("The restart subcommand is only available on Linux (systemd).");
             std::process::exit(0);
         }
         None => {}
@@ -148,7 +159,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Set cache path
     let cache_dir = match env::var("XDG_CACHE_HOME") {
         Ok(xgd_cache_home) => PathBuf::from(xgd_cache_home).join("music-discord-rpc"),
-        Err(_) => home_dir.join(".cache/music-discord-rpc"),
+        Err(_) => {
+            #[cfg(target_os = "windows")]
+            if let Some(local_appdata) = env::var_os("LOCALAPPDATA") {
+                PathBuf::from(local_appdata).join("music-discord-rpc")
+            } else {
+                home_dir.join(".cache/music-discord-rpc")
+            }
+            #[cfg(not(target_os = "windows"))]
+            home_dir.join(".cache/music-discord-rpc")
+        }
     };
 
     if cache_enabled {
@@ -274,6 +294,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 };
             }
 
+            #[cfg(target_os = "windows")]
+            {
+                match utils::get_available_players() {
+                    Ok(player_list) => {
+                        if player_list.is_empty() {
+                            println!("Could not find any active player.");
+                        } else {
+                            println!("");
+                            println!("────────────────────────────────────────────────────");
+                            println!("List of available music players:");
+                            for player_name in &player_list {
+                                println!(" * {}", player_name);
+                            }
+                            println!("");
+                            println!("Use the name to choose from which source the script should take data for the Discord status.");
+                            println!("Usage instructions:");
+                            println!("");
+                            println!(r#" music-discord-rpc -a "{}""#, player_list[0]);
+                            println!("");
+                            println!("You can use the -a argument multiple times to add more than one player to the allowlist:");
+                            println!(
+                                r#" music-discord-rpc -a "{}" -a "Second Player" -a "Any other player""#,
+                                player_list[0]
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        println!("Could not find any active player: {}", e);
+                    }
+                };
+            }
+
             return Ok(());
         }
 
@@ -367,9 +419,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         };
 
+        // On Windows use Windows Media Control (SMTC)
+        #[cfg(target_os = "windows")]
+        let player = match utils::get_currently_playing(&settings.allowlist, allowlist_enabled) {
+            Ok(player) => {
+                if player_notif != 1 {
+                    println!("Found active player using Windows Media Control.");
+                    player_notif = 1;
+                }
+                player
+            }
+            Err(e) => {
+                if player_notif != 2 {
+                    println!("{}", e);
+
+                    player_notif = 2;
+                    discord_notif = false;
+                }
+
+                is_interrupted = true;
+                utils::clear_activity(&mut is_activity_set, &mut client);
+                sleep(Duration::from_secs(interval));
+                continue;
+            }
+        };
+
         #[cfg(target_os = "linux")]
         let mut player_name = player.identity().to_string();
         #[cfg(target_os = "macos")]
+        let mut player_name = player.player_id.clone();
+        #[cfg(target_os = "windows")]
         let mut player_name = player.player_id.clone();
 
         // Use video presence if player is in video_players list
@@ -407,7 +486,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
 
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         let last_player_id = player.player_id.clone();
 
         // Set different name and ID for RPC if enabled by argument
@@ -503,7 +582,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Get metadata from player
             #[cfg(target_os = "linux")]
-            let media_info = match utils::get_currently_playing(&player, settings.debug_log) {
+            let mut media_info = match utils::get_currently_playing(&player, settings.debug_log) {
                 Ok(metadata) => metadata,
                 Err(err) => {
                     println!("Could not get metadata from player: {}", err);
@@ -512,7 +591,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             };
             #[cfg(target_os = "macos")]
-            let media_info = match utils::get_currently_playing() {
+            let mut media_info = match utils::get_currently_playing() {
+                Ok(metadata) => metadata,
+                Err(err) => {
+                    println!("Could not get metadata from player: {}", err);
+                    utils::clear_activity(&mut is_activity_set, &mut client);
+                    break;
+                }
+            };
+            #[cfg(target_os = "windows")]
+            let mut media_info = match utils::get_currently_playing(&settings.allowlist, allowlist_enabled) {
                 Ok(metadata) => metadata,
                 Err(err) => {
                     println!("Could not get metadata from player: {}", err);
@@ -522,8 +610,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
             debug_log!(settings.debug_log, "{:#?}", media_info);
 
-            // Fix allowlist on macos, if player ID changes then break loop
-            #[cfg(target_os = "macos")]
+            // Fix allowlist on macos/windows, if player ID changes then break loop
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             if media_info.player_id != last_player_id {
                 debug_log!(settings.debug_log, "Detected player change.");
                 utils::clear_activity(&mut is_activity_set, client);
@@ -537,7 +625,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 continue;
             }
 
-            let album_id = format!("{} - {}", media_info.album_artist, media_info.album);
+            if media_info.title == last_title
+                && media_info.artist == last_artist
+                && media_info.album == "Unknown Album"
+                && !last_album.is_empty()
+                && last_album != "Unknown Album"
+            {
+                media_info.album = last_album.clone();
+            }
+
+            let mut album_id = if media_info.album == "Unknown Album" {
+                format!("{} - {} - Unknown Album", media_info.album_artist, media_info.title)
+            } else {
+                format!("{} - {}", media_info.album_artist, media_info.album)
+            };
 
             // If all metadata values are unknown then break
             if (media_info.artist.to_lowercase() == "unknown artist")
@@ -619,12 +720,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     _cover_url = utils::get_cover_url(
                         &album_id,
-                        media_info.album.as_str(),
+                        &mut media_info.album,
                         _cover_url,
                         cache_enabled,
                         &mut album_cache,
                         media_info.album_artist.as_str(),
                         &lastfm_api_key,
+                        media_info.title.as_str(),
                     );
 
                     // Fallback for Apple Music for album names with " - EP" and " - Single"
@@ -650,30 +752,75 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 album_name_without_suffix
                             );
 
+                            let mut stripped_album = album_name_without_suffix.to_string();
                             _cover_url = utils::get_cover_url(
                                 &album_id,
-                                album_name_without_suffix,
+                                &mut stripped_album,
                                 _cover_url,
                                 cache_enabled,
                                 &mut album_cache,
                                 media_info.album_artist.as_str(),
                                 &lastfm_api_key,
+                                media_info.title.as_str(),
                             );
+                            if stripped_album != album_name_without_suffix {
+                                media_info.album = stripped_album;
+                            }
                         }
                     }
                 }
 
-                // Use Musicbrainz cover if Last.fm fails
+                // Deezer fallback
+                if _cover_url.is_empty() || _cover_url == "missing-cover" {
+                    if let Some(deezer_cover) = utils::get_cover_url_deezer(
+                        media_info.album_artist.as_str(),
+                        media_info.title.as_str(),
+                        &mut media_info.album,
+                    ) {
+                        _cover_url = deezer_cover;
+                        let new_id = format!("{} - {}", media_info.album_artist, media_info.album);
+                        if cache_enabled {
+                            let _ = album_cache.set(&album_id, &_cover_url);
+                            let _ = album_cache.set(&new_id, &_cover_url);
+                        }
+                        album_id = new_id;
+                    }
+                }
+
+                // iTunes fallback
+                if _cover_url.is_empty() || _cover_url == "missing-cover" {
+                    if let Some(itunes_cover) = utils::get_cover_url_itunes(
+                        media_info.album_artist.as_str(),
+                        media_info.title.as_str(),
+                        &mut media_info.album,
+                    ) {
+                        _cover_url = itunes_cover;
+                        let new_id = format!("{} - {}", media_info.album_artist, media_info.album);
+                        if cache_enabled {
+                            let _ = album_cache.set(&album_id, &_cover_url);
+                            let _ = album_cache.set(&new_id, &_cover_url);
+                        }
+                        album_id = new_id;
+                    }
+                }
+
+                // MusicBrainz fallback
                 if !settings.disable_musicbrainz_cover {
                     if _cover_url.is_empty() || _cover_url == "missing-cover" {
                         _cover_url = utils::get_cover_url_musicbrainz(
                             &album_id,
-                            media_info.album.as_str(),
+                            &mut media_info.album,
                             _cover_url,
                             cache_enabled,
                             &mut album_cache,
                             media_info.album_artist.as_str(),
+                            media_info.title.as_str(),
                         );
+                        let new_id = format!("{} - {}", media_info.album_artist, media_info.album);
+                        if cache_enabled && !_cover_url.is_empty() && _cover_url != "missing-cover" {
+                            let _ = album_cache.set(&new_id, &_cover_url);
+                        }
+                        album_id = new_id;
                     }
                 }
             }
@@ -735,10 +882,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Icon displayed next to the album cover
             match small_image.as_str() {
                 "player" => {
+                    let small_icon_key = match player_id.as_str() {
+                        "google_chrome" => "chrome",
+                        "youtube_music" => "youtube",
+                        "yandex_music" => "music",
+                        "media_player" => "music",
+                        "microsoft_edge" => "chrome",
+                        other => other,
+                    };
                     if !settings.disable_mpris_art_url && image.contains("ytimg.com/") {
                         assets = assets.small_image("youtube").small_text("YouTube")
                     } else {
-                        assets = assets.small_image(&player_id).small_text(&player_name)
+                        assets = assets.small_image(small_icon_key).small_text(&player_name)
                     }
                 }
                 "lastfmAvatar" => {
@@ -900,7 +1055,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             };
 
+            #[cfg(not(target_os = "windows"))]
             sleep(Duration::from_secs(interval));
+
+            #[cfg(target_os = "windows")]
+            {
+                let sleep_step = Duration::from_secs(5);
+                let total_steps = (interval / 5).max(1);
+                let mut should_refresh_now = false;
+
+                for _ in 0..total_steps {
+                    sleep(sleep_step);
+
+                    if let Ok(current_media) = utils::get_currently_playing(&settings.allowlist, allowlist_enabled) {
+                        if current_media.player_id != last_player_id
+                            || current_media.title != last_title
+                            || current_media.artist != last_artist
+                            || current_media.is_playing != last_is_playing
+                        {
+                            should_refresh_now = true;
+                            break;
+                        }
+                    } else if !allowlist_enabled {
+                        should_refresh_now = true;
+                        break;
+                    }
+                }
+
+                if should_refresh_now {
+                    continue;
+                }
+            }
         }
 
         sleep(Duration::from_secs(interval));

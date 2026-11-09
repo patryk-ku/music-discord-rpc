@@ -23,6 +23,14 @@ inquire = "0.9.4"
 [target.'cfg(target_os = "linux")'.dependencies]
 mpris = "2.1.0"
 
+# Windows dependencies
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62.2", features = [
+    "Media_Control",
+    "Foundation",
+    "Foundation_Collections",
+] }
+
 [profile.release]
 strip = true
 codegen-units = 1
