@@ -14,6 +14,7 @@ use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
 mod config_editor;
+mod covers;
 mod settings;
 mod utils;
 
@@ -106,7 +107,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let small_image = settings.small_image.unwrap_or(String::from("playPause"));
     let mut lastfm_avatar = String::new();
     if small_image == "lastfmAvatar" && !lastfm_name.is_empty() {
-        lastfm_avatar = utils::get_lastfm_avatar(&lastfm_name, &lastfm_api_key);
+        lastfm_avatar = covers::get_lastfm_avatar(&lastfm_name, &lastfm_api_key, settings.debug_log);
         debug_log!(settings.debug_log, "lastfm_avatar: {}", lastfm_avatar);
     }
     let lastfm_icon_text = if !lastfm_name.is_empty() {
@@ -715,114 +716,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Fetch album cover
             if album_id != last_album_id {
-                if lastfm_api_key.is_empty() {
-                    _cover_url = "missing-cover".to_string()
-                } else {
-                    _cover_url = utils::get_cover_url(
-                        &album_id,
-                        &mut media_info.album,
-                        _cover_url,
-                        cache_enabled,
-                        &mut album_cache,
-                        media_info.album_artist.as_str(),
-                        &lastfm_api_key,
-                        media_info.title.as_str(),
-                    );
-
-                    // Fallback for Apple Music for album names with " - EP" and " - Single"
-                    if _cover_url.is_empty() || _cover_url == "missing-cover" {
-                        let album_name = media_info.album.trim();
-                        let album_name_without_suffix = if album_name.ends_with(" - EP") {
-                            &album_name[..album_name.len() - 5]
-                        } else if album_name.ends_with(" - Single") {
-                            &album_name[..album_name.len() - 9]
-                        } else {
-                            ""
-                        };
-
-                        if !album_name_without_suffix.is_empty() {
-                            debug_log!(
-                            settings.debug_log,
-                            "Album cover not found, attempting to use album name without the 'EP' or 'Single' suffix (Apple Music)."
-                            );
-                            debug_log!(
-                                settings.debug_log,
-                                "{} => {}",
-                                album_name,
-                                album_name_without_suffix
-                            );
-
-                            let mut stripped_album = album_name_without_suffix.to_string();
-                            _cover_url = utils::get_cover_url(
-                                &album_id,
-                                &mut stripped_album,
-                                _cover_url,
-                                cache_enabled,
-                                &mut album_cache,
-                                media_info.album_artist.as_str(),
-                                &lastfm_api_key,
-                                media_info.title.as_str(),
-                            );
-                            if stripped_album != album_name_without_suffix {
-                                media_info.album = stripped_album;
-                            }
-                        }
-                    }
-                }
-
-                // Deezer fallback
-                if _cover_url.is_empty() || _cover_url == "missing-cover" {
-                    if let Some(deezer_cover) = utils::get_cover_url_deezer(
-                        media_info.album_artist.as_str(),
-                        media_info.title.as_str(),
-                        &mut media_info.album,
-                    ) {
-                        _cover_url = deezer_cover;
-                        let new_id = format!("{} - {}", media_info.album_artist, media_info.album);
-                        if cache_enabled {
-                            let _ = album_cache.set(&album_id, &_cover_url);
-                            let _ = album_cache.set(&new_id, &_cover_url);
-                        }
-                        album_id = new_id;
-                    }
-                }
-
-                // iTunes fallback
-                if _cover_url.is_empty() || _cover_url == "missing-cover" {
-                    if let Some(itunes_cover) = utils::get_cover_url_itunes(
-                        media_info.album_artist.as_str(),
-                        media_info.title.as_str(),
-                        &mut media_info.album,
-                    ) {
-                        _cover_url = itunes_cover;
-                        let new_id = format!("{} - {}", media_info.album_artist, media_info.album);
-                        if cache_enabled {
-                            let _ = album_cache.set(&album_id, &_cover_url);
-                            let _ = album_cache.set(&new_id, &_cover_url);
-                        }
-                        album_id = new_id;
-                    }
-                }
-
-                // MusicBrainz fallback
-                if !settings.disable_musicbrainz_cover {
-                    if _cover_url.is_empty() || _cover_url == "missing-cover" {
-                        _cover_url = utils::get_cover_url_musicbrainz(
-                            &album_id,
-                            &mut media_info.album,
-                            _cover_url,
-                            cache_enabled,
-                            &mut album_cache,
-                            media_info.album_artist.as_str(),
-                            media_info.title.as_str(),
-                        );
-                        let new_id = format!("{} - {}", media_info.album_artist, media_info.album);
-                        if cache_enabled && !_cover_url.is_empty() && _cover_url != "missing-cover" {
-                            let _ = album_cache.set(&new_id, &_cover_url);
-                        }
-                        album_id = new_id;
-                    }
-                }
+                _cover_url = covers::fetch_cover(
+                    &mut album_id,
+                    &mut media_info.album,
+                    &media_info.album_artist,
+                    &media_info.title,
+                    &lastfm_api_key,
+                    cache_enabled,
+                    &mut album_cache,
+                    settings.disable_musicbrainz_cover,
+                    settings.debug_log,
+                );
             }
 
             let image: String = if _cover_url.is_empty() || _cover_url == "missing-cover" {
