@@ -15,6 +15,7 @@ use std::time::{Duration, SystemTime};
 
 mod config_editor;
 mod covers;
+mod platform;
 mod settings;
 mod utils;
 
@@ -42,19 +43,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match settings.suboptions.command {
         Some(settings::Commands::Enable { xdg }) => {
             if xdg {
-                utils::add_xdg_autostart()
+                platform::add_xdg_autostart()
             } else {
-                utils::enable_service()
+                platform::enable_service()
             }
         }
         Some(settings::Commands::Disable { xdg }) => {
             if xdg {
-                utils::remove_xdg_autostart()
+                platform::remove_xdg_autostart()
             } else {
-                utils::disable_service()
+                platform::disable_service()
             }
         }
-        Some(settings::Commands::Restart {}) => utils::restart_service(),
+        Some(settings::Commands::Restart {}) => platform::restart_service(),
         Some(settings::Commands::Config {}) => config_editor::setup(),
         None => {}
     }
@@ -71,8 +72,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     #[cfg(target_os = "windows")]
     match settings.suboptions.command {
-        Some(settings::Commands::Enable { .. }) => utils::enable_autostart(),
-        Some(settings::Commands::Disable { .. }) => utils::disable_autostart(),
+        Some(settings::Commands::Enable { .. }) => platform::enable_autostart(),
+        Some(settings::Commands::Disable { .. }) => platform::disable_autostart(),
         Some(settings::Commands::Config {}) => config_editor::setup(),
         Some(settings::Commands::Restart {}) => {
             println!("The restart subcommand is only available on Linux (systemd).");
@@ -274,7 +275,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "However, it's possible to show the name of the currently detected player."
                 );
 
-                match utils::get_currently_playing() {
+                match platform::get_currently_playing() {
                     Ok(player) => {
                         println!("Player name: {}", player.player_id);
                         println!("");
@@ -297,7 +298,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             #[cfg(target_os = "windows")]
             {
-                match utils::get_available_players() {
+                match platform::get_available_players() {
                     Ok(player_list) => {
                         if player_list.is_empty() {
                             println!("Could not find any active player.");
@@ -333,7 +334,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Find active player (and filter them by name if enabled)
         #[cfg(target_os = "linux")]
         let player_finder = if allowlist_enabled {
-            utils::allowlist_player_finder(&player, &settings.allowlist, settings.debug_log)
+            platform::allowlist_player_finder(&player, &settings.allowlist, settings.debug_log)
         } else {
             player.find_active()
         };
@@ -373,7 +374,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // On macOS use media info fetching function to determine if anything is playing now
         #[cfg(target_os = "macos")]
-        let player = match utils::get_currently_playing() {
+        let player = match platform::get_currently_playing() {
             Ok(player) => {
                 if allowlist_enabled {
                     let mut is_player_on_allowlist = false;
@@ -422,7 +423,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // On Windows use Windows Media Control (SMTC)
         #[cfg(target_os = "windows")]
-        let player = match utils::get_currently_playing(&settings.allowlist, allowlist_enabled) {
+        let player = match platform::get_currently_playing(&settings.allowlist, allowlist_enabled) {
             Ok(player) => {
                 if player_notif != 1 {
                     println!("Found active player using Windows Media Control.");
@@ -467,7 +468,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         #[cfg(target_os = "macos")]
         {
-            player_name = utils::app_name_from_bundle_id(player_name.as_str());
+            player_name = platform::app_name_from_bundle_id(player_name.as_str());
         }
 
         let mut player_id = utils::sanitize_name(&player_name);
@@ -552,7 +553,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Ok(player) => {
                         dbus_notif = false;
                         if allowlist_enabled {
-                            utils::allowlist_player_finder(
+                            platform::allowlist_player_finder(
                                 &player,
                                 &settings.allowlist,
                                 settings.debug_log,
@@ -583,7 +584,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Get metadata from player
             #[cfg(target_os = "linux")]
-            let mut media_info = match utils::get_currently_playing(&player, settings.debug_log) {
+            let mut media_info = match platform::get_currently_playing(&player, settings.debug_log) {
                 Ok(metadata) => metadata,
                 Err(err) => {
                     println!("Could not get metadata from player: {}", err);
@@ -592,7 +593,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             };
             #[cfg(target_os = "macos")]
-            let mut media_info = match utils::get_currently_playing() {
+            let mut media_info = match platform::get_currently_playing() {
                 Ok(metadata) => metadata,
                 Err(err) => {
                     println!("Could not get metadata from player: {}", err);
@@ -601,7 +602,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             };
             #[cfg(target_os = "windows")]
-            let mut media_info = match utils::get_currently_playing(&settings.allowlist, allowlist_enabled) {
+            let mut media_info = match platform::get_currently_playing(&settings.allowlist, allowlist_enabled) {
                 Ok(metadata) => metadata,
                 Err(err) => {
                     println!("Could not get metadata from player: {}", err);
@@ -971,7 +972,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 for _ in 0..total_steps {
                     sleep(sleep_step);
 
-                    if let Ok(current_media) = utils::get_currently_playing(&settings.allowlist, allowlist_enabled) {
+                    if let Ok(current_media) = platform::get_currently_playing(&settings.allowlist, allowlist_enabled) {
                         if current_media.player_id != last_player_id
                             || current_media.title != last_title
                             || current_media.artist != last_artist

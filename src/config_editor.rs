@@ -4,7 +4,7 @@ use std::{fs, path::PathBuf, process};
 
 use crate::settings::create_config_file;
 #[cfg(target_os = "linux")]
-use crate::utils;
+use crate::platform;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Config {
@@ -105,7 +105,7 @@ pub fn setup() {
         {
             Ok(_) => {
                 println!("Restarted user systemd service.");
-                utils::enable_service();
+                platform::enable_service();
             }
             Err(_) => {
                 println!("Failed to restart user systemd service.");
