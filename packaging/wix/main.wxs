@@ -152,8 +152,6 @@
 		</UI>
 
 		<WixVariable Id='WixUILicenseRtf' Value='packaging\wix\License.rtf' />
-		<WixVariable Id='WixUIBannerBmp' Value='packaging\wix\Banner.bmp' />
-		<WixVariable Id='WixUIDialogBmp' Value='packaging\wix\Dialog.bmp' />
 
 	</Product>
 
