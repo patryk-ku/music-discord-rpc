@@ -911,37 +911,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             };
 
-            #[cfg(not(target_os = "windows"))]
             sleep(Duration::from_secs(interval));
-
-            #[cfg(target_os = "windows")]
-            {
-                let sleep_step = Duration::from_secs(5);
-                let total_steps = (interval / 5).max(1);
-                let mut should_refresh_now = false;
-
-                for _ in 0..total_steps {
-                    sleep(sleep_step);
-
-                    if let Ok(current_media) = platform::get_currently_playing(&settings.allowlist, allowlist_enabled) {
-                        if current_media.player_id != last_player_id
-                            || current_media.title != last_title
-                            || current_media.artist != last_artist
-                            || current_media.is_playing != last_is_playing
-                        {
-                            should_refresh_now = true;
-                            break;
-                        }
-                    } else if !allowlist_enabled {
-                        should_refresh_now = true;
-                        break;
-                    }
-                }
-
-                if should_refresh_now {
-                    continue;
-                }
-            }
         }
 
         sleep(Duration::from_secs(interval));
