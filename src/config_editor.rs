@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, process};
 
 use crate::settings::create_config_file;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use crate::platform;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -122,7 +122,8 @@ pub fn setup() {
 
     #[cfg(target_os = "windows")]
     {
-        println!("\nPlease restart music-discord-rpc to apply the changes.");
+        println!("\nNow restarting music-discord-rpc to apply the changes.");
+        platform::restart_process();
     }
 
     process::exit(0);

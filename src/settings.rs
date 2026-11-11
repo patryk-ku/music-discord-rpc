@@ -97,6 +97,12 @@ pub struct Cli {
     #[serde(skip_deserializing)]
     pub reset_config: bool,
 
+    /// Run in the background without a console window (Windows only)
+    #[cfg(target_os = "windows")]
+    #[arg(long)]
+    #[serde(skip_deserializing)]
+    pub background: bool,
+
     /// Recursive fields
     #[serde(skip_deserializing)]
     #[command(flatten)]
@@ -357,6 +363,11 @@ pub fn load_settings() -> Cli {
 
     if args.reset_config {
         config.reset_config = args.reset_config;
+    }
+
+    #[cfg(target_os = "windows")]
+    if args.background {
+        config.background = args.background;
     }
 
     config.suboptions = args.suboptions;

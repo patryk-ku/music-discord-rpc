@@ -1,8 +1,6 @@
 use crate::platform::{MediaInfo, NowPlayingResult};
 use crate::utils::sanitize_name;
 use std::env;
-use std::fs;
-use std::path::PathBuf;
 use std::process;
 use windows::Media::Control::{
     GlobalSystemMediaTransportControlsSession as WinSession,
@@ -10,33 +8,110 @@ use windows::Media::Control::{
     GlobalSystemMediaTransportControlsSessionPlaybackStatus,
 };
 
-pub fn get_startup_dir() -> Option<PathBuf> {
-    env::var_os("APPDATA").map(|appdata| {
-        let mut path = PathBuf::from(appdata);
-        path.push("Microsoft");
-        path.push("Windows");
-        path.push("Start Menu");
-        path.push("Programs");
-        path.push("Startup");
-        path
-    })
+#[link(name = "kernel32")]
+extern "system" {
+    fn FreeConsole() -> i32;
+}
+
+pub fn detach_console() {
+    unsafe {
+        FreeConsole();
+    }
 }
 
 pub fn enable_autostart() {
-    let startup_dir = match get_startup_dir() {
-        Some(dir) => dir,
-        None => {
-            println!("WARNING: Failed to determine user Startup directory.");
+    let exe_path = match env::current_exe() {
+        Ok(path) => path,
+        Err(_) => {
+            println!("ERROR: Failed to determine current executable path.");
             process::exit(1);
         }
     };
 
-    if !startup_dir.exists() {
-        if let Err(_) = fs::create_dir_all(&startup_dir) {
-            println!("ERROR: Failed to create Startup directory.");
+    let exe_str = exe_path.display().to_string();
+    let reg_value = format!("\"{}\" --background", exe_str);
+
+    let status = process::Command::new("reg")
+        .args([
+            "add",
+            r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
+            "/v",
+            "music-discord-rpc",
+            "/t",
+            "REG_SZ",
+            "/d",
+            &reg_value,
+            "/f",
+        ])
+        .output();
+
+    match status {
+        Ok(out) if out.status.success() => {
+            println!("Added music-discord-rpc to user startup registry (HKCU\\...\\Run).");
+            println!("music-discord-rpc will now start automatically in the background on login.");
+            println!("Note: If using portable version and you move this executable, re-run 'enable'.");
+        }
+        _ => {
+            println!("ERROR: Failed to add registry startup entry.");
             process::exit(1);
         }
     }
+
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    match process::Command::new(&exe_path)
+        .arg("--background")
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+    {
+        Ok(_) => {
+            println!("Started music-discord-rpc in the background.");
+        }
+        Err(e) => {
+            println!("WARNING: Failed to start process in background: {}", e);
+        }
+    }
+
+    process::exit(0);
+}
+
+pub fn disable_autostart() {
+    let status = process::Command::new("reg")
+        .args([
+            "delete",
+            r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
+            "/v",
+            "music-discord-rpc",
+            "/f",
+        ])
+        .output();
+
+    match status {
+        Ok(out) if out.status.success() => {
+            println!("Removed music-discord-rpc from startup registry.");
+            println!("Autostart has been disabled.");
+        }
+        _ => {
+            println!("Autostart registry entry was not found or was already removed.");
+        }
+    }
+
+    let current_pid = process::id();
+    let filter = format!("PID ne {}", current_pid);
+    let _ = process::Command::new("taskkill")
+        .args(["/FI", &filter, "/IM", "music-discord-rpc.exe", "/F"])
+        .output();
+
+    println!("Stopped any running background instances.");
+    process::exit(0);
+}
+
+pub fn restart_process() {
+    let current_pid = process::id();
+    let filter = format!("PID ne {}", current_pid);
+    let _ = process::Command::new("taskkill")
+        .args(["/FI", &filter, "/IM", "music-discord-rpc.exe", "/F"])
+        .output();
 
     let exe_path = match env::current_exe() {
         Ok(path) => path,
@@ -46,53 +121,20 @@ pub fn enable_autostart() {
         }
     };
 
-    let vbs_path = startup_dir.join("music-discord-rpc.vbs");
-    let vbs_content = format!(
-        "CreateObject(\"Wscript.Shell\").Run \"\"\"{}\"\"\", 0, False\r\n",
-        exe_path.display()
-    );
-
-    match fs::write(&vbs_path, vbs_content) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    match process::Command::new(&exe_path)
+        .arg("--background")
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+    {
         Ok(_) => {
-            println!(
-                "Created autostart script in Startup folder: {}",
-                vbs_path.display()
-            );
-            println!("music-discord-rpc will now start automatically in the background when you log in.");
+            println!("Restarted music-discord-rpc in the background.");
         }
-        Err(_) => {
-            println!("ERROR: Failed to create autostart script in Startup folder.");
+        Err(e) => {
+            println!("ERROR: Failed to restart process in background: {}", e);
             process::exit(1);
         }
-    }
-
-    process::exit(0);
-}
-
-pub fn disable_autostart() {
-    let startup_dir = match get_startup_dir() {
-        Some(dir) => dir,
-        None => {
-            println!("WARNING: Failed to determine user Startup directory.");
-            process::exit(1);
-        }
-    };
-
-    let vbs_path = startup_dir.join("music-discord-rpc.vbs");
-
-    if vbs_path.exists() {
-        match fs::remove_file(&vbs_path) {
-            Ok(_) => {
-                println!("Removed autostart script from Startup folder.");
-                println!("Autostart has been disabled.");
-            }
-            Err(_) => {
-                println!("ERROR: Failed to remove autostart script from Startup folder.");
-                process::exit(1);
-            }
-        }
-    } else {
-        println!("Autostart script does not exist.");
     }
 
     process::exit(0);

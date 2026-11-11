@@ -34,6 +34,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let settings = settings::load_settings();
 
+    #[cfg(target_os = "windows")]
+    if settings.background {
+        platform::detach_console();
+    }
+
     debug_log!(settings.debug_log, "Settings: {:#?}", settings);
     debug_log!(settings.debug_log, "home_exists: {}", home_exists);
     debug_log!(settings.debug_log, "home_dir: {}", home_dir.display());
@@ -75,10 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(settings::Commands::Enable { .. }) => platform::enable_autostart(),
         Some(settings::Commands::Disable { .. }) => platform::disable_autostart(),
         Some(settings::Commands::Config {}) => config_editor::setup(),
-        Some(settings::Commands::Restart {}) => {
-            println!("The restart subcommand is only available on Linux (systemd).");
-            std::process::exit(0);
-        }
+        Some(settings::Commands::Restart {}) => platform::restart_process(),
         None => {}
     }
 
