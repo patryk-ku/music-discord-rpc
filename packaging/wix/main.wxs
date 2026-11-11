@@ -14,17 +14,12 @@
   See the License for the specific language governing permissions and
   limitations under the License.
 -->
-<?if $(sys.BUILDARCH) = x64 or $(sys.BUILDARCH) = arm64?>
-<?define PlatformProgramFilesFolder = "ProgramFiles64Folder"?>
-<?else?>
-<?define PlatformProgramFilesFolder = "ProgramFilesFolder"?>
-<?endif?>
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
 
 	<Product
 		Id='*'
 		Name='music-discord-rpc'
-		UpgradeCode='9F03F467-63DC-49AD-A132-6C06AE70A2B8'
+		UpgradeCode='EE29A5B5-4DEA-4EFC-B07B-C4B964650CC4'
 		Manufacturer='Patryk Kurdziel'
 		Language='1033'
 		Codepage='1252'
@@ -39,7 +34,7 @@
 			InstallerVersion='450'
 			Languages='1033'
 			Compressed='yes'
-			InstallScope='perMachine'
+			InstallScope='perUser'
 			SummaryCodepage='1252'
 		/>
 
@@ -48,45 +43,72 @@
 			DowngradeErrorMessage='A newer version of [ProductName] is already installed. Setup will now exit.'
 		/>
 
+		<Property Id='ALLUSERS' Value='2' />
+		<Property Id='MSIINSTALLPERUSER' Value='1' />
+
 		<Media Id='1' Cabinet='media1.cab' EmbedCab='yes' DiskPrompt='CD-ROM #1' />
 		<Property Id='DiskPrompt' Value='music-discord-rpc Installation' />
 
 		<Directory Id='TARGETDIR' Name='SourceDir'>
-			<Directory Id='$(var.PlatformProgramFilesFolder)' Name='PFiles'>
-				<Directory Id='APPLICATIONFOLDER' Name='music-discord-rpc'>
-					<Component Id='License' Guid='*'>
-						<File
-							Id='LicenseFile'
-							DiskId='1'
-							Source='packaging\wix\License.rtf'
-							KeyPath='yes'
-						/>
-					</Component>
-
-					<Directory Id='Bin' Name='bin'>
-						<Component
-							Id='Path'
-							Guid='60EE195F-6AF2-4C79-89B0-4EC8416A593C'
-							KeyPath='yes'
-						>
-							<Environment
-								Id='PATH'
-								Name='PATH'
-								Value='[Bin]'
-								Permanent='no'
-								Part='last'
-								Action='set'
-								System='yes'
+			<Directory Id='LocalAppDataFolder' Name='AppData'>
+				<Directory Id='ProgramsFolder' Name='Programs'>
+					<Directory Id='APPLICATIONFOLDER' Name='music-discord-rpc'>
+						<Component Id='License' Guid='2C93C2D7-AD89-4CC4-80BC-ED407B0319E9'>
+							<RegistryValue
+								Root='HKCU'
+								Key='Software\Patryk Kurdziel\music-discord-rpc'
+								Name='License'
+								Type='string'
+								Value='1'
+								KeyPath='yes'
+							/>
+							<File
+								Id='LicenseFile'
+								DiskId='1'
+								Source='packaging\wix\License.rtf'
 							/>
 						</Component>
-						<Component Id='binary0' Guid='*'>
+
+						<Component Id='binary0' Guid='B2DB2075-9DBC-40FE-803E-083BFF1A13F2'>
+							<RegistryValue
+								Root='HKCU'
+								Key='Software\Patryk Kurdziel\music-discord-rpc'
+								Name='InstallPath'
+								Type='string'
+								Value='[APPLICATIONFOLDER]'
+								KeyPath='yes'
+							/>
 							<File
 								Id='exe0'
 								Name='music-discord-rpc.exe'
 								DiskId='1'
 								Source='$(var.CargoTargetBinDir)\music-discord-rpc.exe'
+							/>
+						</Component>
+
+						<Component
+							Id='Path'
+							Guid='78FB3AA9-0A23-42E1-89F3-D7E848823BDA'
+						>
+							<RegistryValue
+								Root='HKCU'
+								Key='Software\Patryk Kurdziel\music-discord-rpc'
+								Name='PathEnvironment'
+								Type='string'
+								Value='1'
 								KeyPath='yes'
 							/>
+							<Environment
+								Id='PATH'
+								Name='PATH'
+								Value='[APPLICATIONFOLDER]'
+								Permanent='no'
+								Part='last'
+								Action='set'
+								System='no'
+							/>
+							<RemoveFolder Id='RemoveApplicationFolder' Directory='APPLICATIONFOLDER' On='uninstall'/>
+							<RemoveFolder Id='RemoveProgramsFolder' Directory='ProgramsFolder' On='uninstall'/>
 						</Component>
 					</Directory>
 				</Directory>
@@ -109,7 +131,7 @@
 			<Feature
 				Id='Environment'
 				Title='PATH Environment Variable'
-				Description='Add the install location of the [ProductName] executable to the PATH system environment variable. This allows the [ProductName] executable to be called from any location.'
+				Description='Add the install location of the [ProductName] executable to the PATH environment variable. This allows the [ProductName] executable to be called from any location.'
 				Level='1'
 				Absent='allow'
 			>
