@@ -237,35 +237,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             #[cfg(target_os = "linux")]
             match player.find_all() {
                 Ok(player_list) => {
-                    if player_list.is_empty() {
-                        println!("Could not find any player with MPRIS support.");
-                    } else {
-                        println!("");
-                        println!("────────────────────────────────────────────────────");
-                        println!("List of available music players with MPRIS support:");
-                        for music_player in &player_list {
-                            if music_player.bus_name() != "org.mpris.MediaPlayer2.playerctld" {
-                                println!(" * {}", music_player.identity());
-                            }
-                        }
-                        println!("");
-                        println!("Use the name to choose from which source the script should take data for the Discord status.");
-                        println!("Usage instructions:");
-                        println!("");
-                        println!(r#" music-discord-rpc -a "{}""#, player_list[0].identity());
-                        println!("");
-                        println!("You can use the -a argument multiple times to add more than one player to the allowlist:");
-                        println!("");
-                        println!(
-                            r#" music-discord-rpc -a "{}" -a "Second Player" -a "Any other player""#,
-                            player_list[0].identity()
-                        );
-                    }
+                    let players: Vec<String> = player_list
+                        .into_iter()
+                        .filter(|p| p.bus_name() != "org.mpris.MediaPlayer2.playerctld")
+                        .map(|p| p.identity().to_string())
+                        .collect();
+                    print_available_players(&players, Some("MPRIS"));
                 }
                 Err(_) => {
                     println!("Could not find any player with MPRIS support.");
                 }
-            };
+            }
 
             #[cfg(target_os = "macos")]
             {
@@ -293,39 +275,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Err(_) => {
                         println!("No player detected.");
                     }
-                };
+                }
             }
 
             #[cfg(target_os = "windows")]
-            {
-                match platform::get_available_players() {
-                    Ok(player_list) => {
-                        if player_list.is_empty() {
-                            println!("Could not find any active player.");
-                        } else {
-                            println!("");
-                            println!("────────────────────────────────────────────────────");
-                            println!("List of available music players:");
-                            for player_name in &player_list {
-                                println!(" * {}", player_name);
-                            }
-                            println!("");
-                            println!("Use the name to choose from which source the script should take data for the Discord status.");
-                            println!("Usage instructions:");
-                            println!("");
-                            println!(r#" music-discord-rpc -a "{}""#, player_list[0]);
-                            println!("");
-                            println!("You can use the -a argument multiple times to add more than one player to the allowlist:");
-                            println!(
-                                r#" music-discord-rpc -a "{}" -a "Second Player" -a "Any other player""#,
-                                player_list[0]
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        println!("Could not find any active player: {}", e);
-                    }
-                };
+            match platform::get_available_players() {
+                Ok(player_list) => print_available_players(&player_list, None),
+                Err(e) => {
+                    println!("Could not find any active player: {}", e);
+                }
             }
 
             return Ok(());
@@ -787,14 +745,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Icon displayed next to the album cover
             match small_image.as_str() {
                 "player" => {
-                    let small_icon_key = match player_id.as_str() {
-                        "google_chrome" => "chrome",
-                        "youtube_music" => "youtube",
-                        "yandex_music" => "music",
-                        "media_player" => "music",
-                        "microsoft_edge" => "chrome",
-                        other => other,
-                    };
+                    let small_icon_key = utils::map_player_icon(&player_id);
                     if !settings.disable_mpris_art_url && image.contains("ytimg.com/") {
                         assets = assets.small_image("youtube").small_text("YouTube")
                     } else {
@@ -995,4 +946,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         sleep(Duration::from_secs(interval));
     }
+}
+
+fn print_available_players(players: &[String], subtitle: Option<&str>) {
+    if players.is_empty() {
+        if let Some(sub) = subtitle {
+            println!("Could not find any player with {} support.", sub);
+        } else {
+            println!("Could not find any active player.");
+        }
+        return;
+    }
+
+    println!();
+    println!("────────────────────────────────────────────────────");
+    if let Some(sub) = subtitle {
+        println!("List of available music players with {} support:", sub);
+    } else {
+        println!("List of available music players:");
+    }
+    for player_name in players {
+        println!(" * {}", player_name);
+    }
+    println!();
+    println!("Use the name to choose from which source the script should take data for the Discord status.");
+    println!("Usage instructions:");
+    println!();
+    println!(r#" music-discord-rpc -a "{}""#, players[0]);
+    println!();
+    println!("You can use the -a argument multiple times to add more than one player to the allowlist:");
+    println!();
+    println!(
+        r#" music-discord-rpc -a "{}" -a "Second Player" -a "Any other player""#,
+        players[0]
+    );
 }
