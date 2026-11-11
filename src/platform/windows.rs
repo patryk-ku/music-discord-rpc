@@ -215,10 +215,12 @@ pub fn get_active_session(
         return Err("Could not find any active player from your allowlist. Waiting for any player from your allowlist...".into());
     }
 
-    // Check focused session first
+    // Check focused session first IF it is currently playing
     if let Some(ref curr) = current_session {
         if session_media_props(curr).is_some() {
-            return Ok(curr.clone());
+            if let Some(GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing) = session_playback_status(curr) {
+                return Ok(curr.clone());
+            }
         }
     }
 
